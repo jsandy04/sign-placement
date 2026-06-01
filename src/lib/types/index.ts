@@ -162,6 +162,7 @@ export interface SignPlacement extends LatLng {
   placementType: PlacementType;
   flag: ConstraintFlag;
   isSelected: boolean;
+  approachBearing?: number;
 }
 
 export interface SignPlacementResult {

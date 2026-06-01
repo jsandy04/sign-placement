@@ -45,6 +45,7 @@ export function selectTopN(candidates: ScoredCandidate[], llmResult: LLMRankedRe
     placementType: candidate.placementType,
     flag: candidate.flag,
     isSelected: true,
+    approachBearing: candidate.approachBearing,
   }));
 }
 
