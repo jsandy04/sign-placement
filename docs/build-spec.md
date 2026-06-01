@@ -41,13 +41,20 @@ Browser                          Next.js Server (Hetzner VPS)
 | Maps APIs | Geocoding + Routes + Maps JavaScript + Places | — |
 | Deployment | Docker Compose on Hetzner VPS | — |
 
+## API Key Model
+
+All API keys are operator-owned and configured server-side. Users bring nothing. This keeps the tool friction-free for small-circle use. BYOK and account management are explicitly out of scope until after the initial version proves useful in the real world.
+
+Rate limiting (see API Routes below) protects against runaway costs.
+
 ## Environment Variables (.env.local)
 
 ```bash
 # Server-side Google Maps key (Geocoding + Routes APIs enabled)
 GOOGLE_MAPS_API_KEY=
 
-# Browser-side Google Maps key (Maps JavaScript API only, restricted to your domain)
+# Browser-side Google Maps key (Maps JavaScript API + Places API enabled)
+# Restrict this key to your production domain in Google Cloud Console
 NEXT_PUBLIC_GOOGLE_MAPS_KEY=
 
 # Anthropic API key for Claude Sonnet 4.6
@@ -55,26 +62,29 @@ ANTHROPIC_API_KEY=
 
 # SQLite database path (default: ./data/sign-placement.db)
 DATABASE_URL=file:./data/sign-placement.db
+
+# Rate limit: max analyses per IP per day (default: 10)
+RATE_LIMIT_PER_IP_PER_DAY=10
 ```
 
-## Google Cloud Setup (human task — do while code builds)
+## Google Cloud Setup (one-time operator task)
 
 1. Create project at https://console.cloud.google.com
 2. Enable billing (required even for free tier)
 3. Enable APIs: **Geocoding API**, **Routes API**, **Maps JavaScript API**, **Places API**
    - Places API is required for the `AddressAutocomplete` widget (uses the `places` library loaded via the Maps JS API bootstrap URL)
-   - Places Autocomplete sessions are billed per-request (~$0.003 per autocomplete session); with free tier this is essentially zero cost for this app's usage pattern
+   - Places Autocomplete sessions are billed per-request (~$0.003 per session); negligible at this usage scale
 4. Create two API keys:
-   - **Server key** (unrestricted, with Geocoding + Routes APIs enabled) → `GOOGLE_MAPS_API_KEY`
-   - **Browser/Maps key** (restricted to `http://localhost:3000/*` and your production domain, with Maps JavaScript API + Places API enabled) → `NEXT_PUBLIC_GOOGLE_MAPS_KEY`
+   - **Server key** (restricted to your VPS IP, Geocoding + Routes APIs enabled) → `GOOGLE_MAPS_API_KEY`
+   - **Browser key** (restricted to your production domain, Maps JavaScript API + Places API enabled) → `NEXT_PUBLIC_GOOGLE_MAPS_KEY`
      - Load the Maps JS API with: `https://maps.googleapis.com/maps/api/js?key=KEY&libraries=places`
-5. Set a daily spending cap of $5 to prevent accidental runaway costs
+5. Set a daily spending cap of $10 in Google Cloud Console
 
-## Anthropic Setup (human task)
+## Anthropic Setup (one-time operator task)
 
 1. Create account at https://console.anthropic.com
 2. Generate API key → `ANTHROPIC_API_KEY`
-3. Add credits (pay-as-you-go)
+3. Add credits (pay-as-you-go). Expected cost: ~$0.023/analysis at Claude Sonnet 4.6 rates.
 
 ---
 
@@ -424,11 +434,20 @@ CREATE TABLE placements (
   flag TEXT,                       -- 'none' | 'safety' | 'legal' | 'visibility'
   is_selected INTEGER DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  ip    TEXT NOT NULL,
+  date  TEXT NOT NULL,     -- YYYY-MM-DD
+  count INTEGER DEFAULT 1,
+  PRIMARY KEY (ip, date)
+);
 ```
 
 ## API Routes
 
 ### `POST /api/analyze`
+
+**Rate limiting**: Max `RATE_LIMIT_PER_IP_PER_DAY` (default: 10) requests per IP per day. Tracked in SQLite using a `rate_limits` table (`ip`, `date`, `count`). No external dependency needed.
 
 ```typescript
 // Request
@@ -446,6 +465,9 @@ CREATE TABLE placements (
 
 // Response (422) — geocoding failed
 { error: "GEOCODE_FAILED"; message: "We couldn't find this address. Please check the address and try including the ZIP code." }
+
+// Response (429) — rate limit exceeded
+{ error: "RATE_LIMIT_EXCEEDED"; message: "You've reached the daily limit. Try again tomorrow." }
 
 // Response (500) — unrecoverable
 { error: "PIPELINE_FAILED"; message: "Something went wrong. Please try again." }
