@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { nanoid } from "nanoid";
-import { analyses, migrationSql, placements, schema } from "./schema";
+import { analyses, migrationSql, placements, rateLimits, schema } from "./schema";
 import type { SignPlacement, SignPlacementResult } from "@/lib/types";
 
 type AnalysisStatus = "complete" | "degraded";
@@ -131,4 +131,35 @@ export function cleanupExpired() {
   });
 
   return expiredIds.length;
+}
+
+export function checkAndIncrementRateLimit(ip: string) {
+  const db = getDb();
+  const limit = Number.parseInt(process.env.RATE_LIMIT_PER_IP_PER_DAY ?? "10", 10);
+  const dailyLimit = Number.isFinite(limit) ? limit : 10;
+  const date = new Date().toISOString().slice(0, 10);
+
+  return db.transaction((tx) => {
+    const [row] = tx
+      .select({ count: rateLimits.count })
+      .from(rateLimits)
+      .where(and(eq(rateLimits.ip, ip), eq(rateLimits.date, date)))
+      .limit(1)
+      .all();
+
+    if ((row?.count ?? 0) >= dailyLimit) {
+      return false;
+    }
+
+    if (row) {
+      tx.update(rateLimits)
+        .set({ count: sql`${rateLimits.count} + 1` })
+        .where(and(eq(rateLimits.ip, ip), eq(rateLimits.date, date)))
+        .run();
+    } else {
+      tx.insert(rateLimits).values({ ip, date, count: 1 }).run();
+    }
+
+    return true;
+  });
 }

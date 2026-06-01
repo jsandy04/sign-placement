@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const analyses = sqliteTable("analyses", {
   id: text("id").primaryKey(),
@@ -33,9 +33,20 @@ export const placements = sqliteTable("placements", {
   isSelected: integer("is_selected").default(1),
 });
 
+export const rateLimits = sqliteTable(
+  "rate_limits",
+  {
+    ip: text("ip").notNull(),
+    date: text("date").notNull(),
+    count: integer("count").default(1),
+  },
+  (table) => [primaryKey({ columns: [table.ip, table.date] })],
+);
+
 export const schema = {
   analyses,
   placements,
+  rateLimits,
 };
 
 export const migrationSql = `
@@ -67,5 +78,12 @@ CREATE TABLE IF NOT EXISTS placements (
   placement_type TEXT,
   flag TEXT,
   is_selected INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  ip    TEXT NOT NULL,
+  date  TEXT NOT NULL,
+  count INTEGER DEFAULT 1,
+  PRIMARY KEY (ip, date)
 );
 `;
