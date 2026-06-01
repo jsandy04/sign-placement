@@ -59,6 +59,8 @@ export interface DecisionPoint extends LatLng {
   distanceFromPrior: number;
   speedEstimate: number;
   turnNumber: number;
+  approachBearing?: number;
+  isProperty?: boolean;
 }
 
 export interface RouteData {
@@ -69,6 +71,7 @@ export interface RouteData {
   steps: RouteStep[];
   polylinePoints: LatLng[];
   decisionPoints: DecisionPoint[];
+  polylineFallbackActive?: boolean;
 }
 
 export type CandidateType = "before" | "at" | "after" | "property";
@@ -92,6 +95,7 @@ export interface CandidateLocation extends LatLng {
   distanceToTurn: number;
   recommendedOffset: number;
   speedEstimate: number;
+  approachBearing?: number;
 }
 
 export interface FilteredCandidate extends CandidateLocation {

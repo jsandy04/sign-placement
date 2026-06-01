@@ -58,6 +58,29 @@ export function bearingDeltaDegrees(a: number, b: number) {
   return delta;
 }
 
+export function destinationPoint(origin: LatLng, bearing: number, distanceFeet: number) {
+  const angularDistance = feetToMeters(distanceFeet) / EARTH_RADIUS_METERS;
+  const bearingRadians = toRadians(bearing);
+  const lat1 = toRadians(origin.lat);
+  const lng1 = toRadians(origin.lng);
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angularDistance) +
+      Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearingRadians),
+  );
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(bearingRadians) * Math.sin(angularDistance) * Math.cos(lat1),
+      Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2),
+    );
+
+  return {
+    lat: toDegrees(lat2),
+    lng: ((toDegrees(lng2) + 540) % 360) - 180,
+  };
+}
+
 export function decodePolyline(polyline: string) {
   const points: LatLng[] = [];
   let index = 0;
