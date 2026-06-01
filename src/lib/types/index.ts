@@ -165,15 +165,18 @@ export interface SignPlacement extends LatLng {
   approachBearing?: number;
 }
 
+export interface RouteSummary {
+  approachRoad: string;
+  distance: number;
+  duration: number;
+  polyline: string;
+}
+
 export interface SignPlacementResult {
   id: string;
   placements: SignPlacement[];
-  route: {
-    approachRoad: string;
-    distance: number;
-    duration: number;
-    polyline: string;
-  };
+  route: RouteSummary;
+  routes?: RouteSummary[];
   fullReasoning: string;
   degradationLevel: number;
   costs: {

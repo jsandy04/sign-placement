@@ -23,6 +23,7 @@ export function PlacementCard({
   onStreetView,
 }: PlacementCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const isProperty = placement.placementType === "property";
 
   return (
     <Card className={`p-4 transition ${active ? "border-zinc-950 ring-2 ring-zinc-950/10" : ""}`}>
@@ -32,7 +33,11 @@ export function PlacementCard({
             <div className="text-sm font-semibold text-zinc-950">Sign #{placement.sortOrder}</div>
             <div className="text-xs capitalize text-zinc-500">{placement.placementType}</div>
           </div>
-          {typeof placement.score === "number" ? <Badge>{Math.round(placement.score)}</Badge> : null}
+          {isProperty ? (
+            <Badge className="border-zinc-300 bg-zinc-100 text-zinc-800">Mandatory</Badge>
+          ) : typeof placement.score === "number" ? (
+            <Badge>{Math.round(placement.score)}</Badge>
+          ) : null}
         </div>
         <p className="text-sm leading-5 text-zinc-700">{placement.description}</p>
       </button>

@@ -74,7 +74,7 @@ export function insertAnalysis(input: InsertAnalysisInput) {
       tx.insert(placements)
         .values(
           selectedPlacements.map((placement) => ({
-            id: placement.id,
+            id: `${id}-${placement.id}`,
             analysisId: id,
             sortOrder: placement.sortOrder,
             lat: placement.lat,

@@ -12,7 +12,7 @@ export default function Home() {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
 
   return (
-    <APIProvider apiKey={apiKey} libraries={["places", "streetview"]}>
+    <APIProvider apiKey={apiKey} libraries={["places"]}>
       <AnalysisWorkspace />
     </APIProvider>
   );
@@ -49,6 +49,7 @@ function AnalysisWorkspace() {
         streetViewHeading={streetView.heading}
         streetViewLoading={streetView.loading}
         streetViewAvailable={streetView.available}
+        streetViewPanoId={streetView.panoId}
         onSelectPlacement={selectPlacement}
         onPreviousStreetView={streetView.previous}
         onNextStreetView={streetView.next}

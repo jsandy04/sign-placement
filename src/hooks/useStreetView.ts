@@ -7,6 +7,7 @@ import type { SignPlacement } from "@/lib/types";
 export function useStreetView(placements: SignPlacement[]) {
   const [selectedPlacement, setSelectedPlacement] = useState<SignPlacement>();
   const [availability, setAvailability] = useState<Record<string, boolean>>({});
+  const [panoIds, setPanoIds] = useState<Record<string, string>>({});
   const [loadingPlacementId, setLoadingPlacementId] = useState<string>();
   const apiLoaded = useApiIsLoaded();
 
@@ -26,11 +27,12 @@ export function useStreetView(placements: SignPlacement[]) {
           radius: 75,
           source: google.maps.StreetViewSource.OUTDOOR,
         },
-        (_data, status) => {
-          setAvailability((current) => ({
-            ...current,
-            [placement.id]: status === google.maps.StreetViewStatus.OK,
-          }));
+        (data, status) => {
+          const ok = status === google.maps.StreetViewStatus.OK;
+          setAvailability((current) => ({ ...current, [placement.id]: ok }));
+          if (ok && data?.location?.pano) {
+            setPanoIds((current) => ({ ...current, [placement.id]: data.location!.pano! }));
+          }
         },
       );
     });
@@ -66,6 +68,7 @@ export function useStreetView(placements: SignPlacement[]) {
     selectedPlacement,
     heading,
     availability,
+    panoId: selectedPlacement ? panoIds[selectedPlacement.id] : undefined,
     loading: Boolean(selectedPlacement && loadingPlacementId === selectedPlacement.id),
     available: selectedPlacement ? availability[selectedPlacement.id] ?? false : false,
     setSelectedPlacement,

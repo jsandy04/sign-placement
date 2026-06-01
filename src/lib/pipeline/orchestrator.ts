@@ -53,7 +53,8 @@ async function runAnalysis(input: AnalyzeInput) {
 
   try {
     llmResult = await llmEvaluate(scoredCandidates.slice(0, llmCandidateCount), routeContext);
-  } catch {
+  } catch (error) {
+    console.error("[pipeline] LLM failed:", error);
     degradationLevel = Math.max(degradationLevel, 3);
     llmResult = deterministicLLMResult(scoredCandidates);
   }
@@ -69,6 +70,12 @@ async function runAnalysis(input: AnalyzeInput) {
       duration: primaryRoute.duration,
       polyline: primaryRoute.polyline,
     },
+    routes: routes.map((route) => ({
+      approachRoad: route.approachRoad,
+      distance: route.distance,
+      duration: route.duration,
+      polyline: route.polyline,
+    })),
     fullReasoning: llmResult.overall_assessment,
     degradationLevel: Math.max(degradationLevel, routes.some((route) => route.polylineFallbackActive) ? 2 : 0),
     costs: {

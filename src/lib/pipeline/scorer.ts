@@ -57,15 +57,11 @@ function decisionPointScore(maneuverType: ManeuverType) {
 }
 
 function trafficVolumeScore(speedMph: number) {
-  if (speedMph >= 45) {
-    return 100;
-  }
+  // Real road speed is a proxy for road class / traffic exposure. Scale smoothly from
+  // ~25 (slow residential, 20 mph) to 100 (arterial/highway, 50+ mph) instead of bucketing.
+  const normalized = (speedMph - 20) / (50 - 20);
 
-  if (speedMph >= 35) {
-    return 65;
-  }
-
-  return 35;
+  return Math.min(100, Math.max(25, normalized * 100));
 }
 
 function visibilityScore(distanceToTurn: number) {

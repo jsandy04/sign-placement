@@ -118,23 +118,13 @@ function cumulativeDistance(steps: RouteStep[], index: number) {
 }
 
 function estimateSpeedMph(step: RouteStep) {
-  const miles = step.distance / 1_609.344;
-
-  if (step.maneuverType === "merge") {
-    return 65;
+  // Derive the real speed from the traffic-aware duration the Routes API already returns,
+  // instead of bucketing into fixed guesses. Clamp to a realistic road-speed range.
+  if (step.distance <= 0 || step.duration <= 0) {
+    return step.maneuverType === "merge" ? 65 : 35;
   }
 
-  if (miles > 0.5 && step.duration > 60) {
-    return 45;
-  }
+  const mph = (step.distance / step.duration) * 2.23694;
 
-  if (miles >= 0.1 && miles <= 0.5 && step.duration >= 15 && step.duration <= 60) {
-    return 35;
-  }
-
-  if (miles < 0.1 && step.duration < 15) {
-    return 25;
-  }
-
-  return 35;
+  return Math.round(Math.min(75, Math.max(10, mph)));
 }

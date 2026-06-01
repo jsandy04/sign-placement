@@ -18,6 +18,7 @@ interface MapViewProps {
   streetViewHeading: number;
   streetViewLoading: boolean;
   streetViewAvailable: boolean;
+  streetViewPanoId?: string;
   onSelectPlacement: (placement: SignPlacement) => void;
   onPreviousStreetView: () => void;
   onNextStreetView: () => void;
@@ -31,6 +32,7 @@ export function MapView({
   streetViewHeading,
   streetViewLoading,
   streetViewAvailable,
+  streetViewPanoId,
   onSelectPlacement,
   onPreviousStreetView,
   onNextStreetView,
@@ -38,6 +40,8 @@ export function MapView({
   const placements = result?.placements ?? [];
   const property = placements.find((placement) => placement.placementType === "property");
   const mapId = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID;
+  // Older persisted results only have `route`; fall back to it when `routes` is absent.
+  const routes = result?.routes?.length ? result.routes : result?.route ? [result.route] : [];
 
   useMapBounds(placements, result?.route.polyline);
 
@@ -63,7 +67,13 @@ export function MapView({
           disableDefaultUI={false}
           className="h-full w-full"
         >
-          <RoutePolyline encodedPath={result?.route.polyline} />
+          {routes.map((route, index) => (
+            <RoutePolyline
+              key={`${route.approachRoad}-${index}`}
+              encodedPath={route.polyline}
+              primary={index === 0}
+            />
+          ))}
           {placements.map((placement) => (
             <SignMarker
               key={placement.id}
@@ -86,6 +96,7 @@ export function MapView({
             heading={streetViewHeading}
             loading={streetViewLoading}
             available={streetViewAvailable}
+            panoId={streetViewPanoId}
             onPrevious={onPreviousStreetView}
             onNext={onNextStreetView}
           />

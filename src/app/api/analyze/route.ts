@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.error("[analyze] pipeline error:", error);
     return NextResponse.json(
       {
         error: "PIPELINE_FAILED",

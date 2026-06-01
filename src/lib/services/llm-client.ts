@@ -15,10 +15,12 @@ Rules:
 3. High-traffic intersections are most valuable — prioritize candidates at or near major intersections.
 4. Final sign must be at the property address.
 5. All candidates have been pre-validated for code compliance, physical feasibility, and spatial constraints. Do NOT re-check these.
-6. Space selected signs well apart — do not select two signs within 100 feet of each other unless they serve different turns.
-7. If no candidate adequately serves a given turn, flag the gap rather than forcing a suboptimal selection.
+6. Space selected signs well apart — do not select two signs within 50 feet of each other, and prefer at least 500 feet of spacing, unless they serve different turns.
+7. If no candidate adequately serves a given turn — or if two consecutive selected signs would be more than half a mile (~0.5 miles) apart — flag the gap in gaps_or_warnings rather than forcing a suboptimal selection.
 
-Scoring methodology: Each candidate has been scored on decision-point criticality (30%), traffic volume (25%), visibility quality (20%), approach speed alignment (15%), and sign spacing (10%). Understand these weights when evaluating the pre-scored list. Prefer higher-scored candidates but override when you identify qualitative factors the scoring missed.`;
+Scoring methodology: Each candidate has been scored on decision-point criticality (30%), traffic volume (25%), visibility quality (20%), approach speed alignment (15%), and sign spacing (10%). Understand these weights when evaluating the pre-scored list. Prefer higher-scored candidates but override when you identify qualitative factors the scoring missed.
+
+Rationale writing style: Write each sign's rationale in plain, conversational English for a busy real estate agent — not an engineer. Keep it to one or two short sentences that teach the practical "why" (for example: "This is the busy corner where drivers turn off the main road, so it catches the most eyes and points them toward the house."). Do NOT mention numeric scores, internal metric names (decision-point criticality, traffic volume, etc.), exact feet or mph figures, or route IDs. Sound like an experienced colleague giving quick, confident advice.`;
 
 const rankCandidatesTool: Tool = {
   name: "rank_sign_candidates",
@@ -26,12 +28,14 @@ const rankCandidatesTool: Tool = {
   strict: true,
   input_schema: {
     type: "object",
+    additionalProperties: false,
     properties: {
       overall_assessment: { type: "string" },
       selected_signs: {
         type: "array",
         items: {
           type: "object",
+          additionalProperties: false,
           properties: {
             turn_number: { type: "integer" },
             candidate_id: { type: "string" },
@@ -39,23 +43,25 @@ const rankCandidatesTool: Tool = {
             confidence: { type: "number" },
             flagged_alternatives: { type: "array", items: { type: "string" } },
           },
-          required: ["turn_number", "candidate_id", "rationale", "confidence"],
+          required: ["turn_number", "candidate_id", "rationale", "confidence", "flagged_alternatives"],
         },
       },
       gaps_or_warnings: {
         type: "array",
         items: {
           type: "object",
+          additionalProperties: false,
           properties: {
             turn_number: { type: "integer" },
             issue: { type: "string" },
             suggestion: { type: "string" },
           },
-          required: ["turn_number", "issue"],
+          required: ["turn_number", "issue", "suggestion"],
         },
       },
       route_coherence_check: {
         type: "object",
+        additionalProperties: false,
         properties: {
           passes: { type: "boolean" },
           notes: { type: "string" },

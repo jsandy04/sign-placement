@@ -35,6 +35,12 @@ interface GeocodingResponse {
   }>;
 }
 
+// Routes API uses { latitude, longitude } — different from our internal LatLng { lat, lng }
+interface ApiLatLng {
+  latitude: number;
+  longitude: number;
+}
+
 interface RoutesResponse {
   routes?: Array<{
     distanceMeters?: number;
@@ -51,10 +57,10 @@ interface RoutesResponse {
           instructions?: string;
         };
         startLocation?: {
-          latLng?: LatLng;
+          latLng?: ApiLatLng;
         };
         endLocation?: {
-          latLng?: LatLng;
+          latLng?: ApiLatLng;
         };
         polyline?: {
           encodedPolyline?: string;
@@ -108,8 +114,8 @@ export async function computeRoutes(origin: LatLng, destination: LatLng): Promis
             "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration,routes.legs.steps.navigationInstruction,routes.legs.steps.startLocation,routes.legs.steps.endLocation,routes.legs.steps.polyline.encodedPolyline",
         },
         body: JSON.stringify({
-          origin: { location: { latLng: origin } },
-          destination: { location: { latLng: destination } },
+          origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
+          destination: { location: { latLng: { latitude: destination.lat, longitude: destination.lng } } },
           travelMode: "DRIVE",
           routingPreference: "TRAFFIC_AWARE",
           polylineQuality: "HIGH_QUALITY",
@@ -140,9 +146,13 @@ export async function computeRoutes(origin: LatLng, destination: LatLng): Promis
   };
 }
 
+function toLatLng(apiLatLng: ApiLatLng | undefined): LatLng {
+  return { lat: apiLatLng?.latitude ?? 0, lng: apiLatLng?.longitude ?? 0 };
+}
+
 function toRouteStep(step: NonNullable<NonNullable<NonNullable<RoutesResponse["routes"]>[number]["legs"]>[number]["steps"]>[number]): RouteStep {
-  const start = step.startLocation?.latLng ?? { lat: 0, lng: 0 };
-  const end = step.endLocation?.latLng ?? { lat: 0, lng: 0 };
+  const start = toLatLng(step.startLocation?.latLng);
+  const end = toLatLng(step.endLocation?.latLng);
 
   return {
     start,

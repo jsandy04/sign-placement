@@ -10,6 +10,7 @@ interface StreetViewPanelProps {
   heading: number;
   loading: boolean;
   available: boolean;
+  panoId?: string;
   onPrevious: () => void;
   onNext: () => void;
 }
@@ -19,6 +20,7 @@ export function StreetViewPanel({
   heading,
   loading,
   available,
+  panoId,
   onPrevious,
   onNext,
 }: StreetViewPanelProps) {
@@ -30,8 +32,6 @@ export function StreetViewPanel({
       return;
     }
 
-    const position = { lat: placement.lat, lng: placement.lng };
-
     if (!panoramaRef.current) {
       panoramaRef.current = new google.maps.StreetViewPanorama(containerRef.current, {
         addressControl: false,
@@ -42,9 +42,15 @@ export function StreetViewPanel({
       });
     }
 
-    panoramaRef.current.setPosition(position);
+    // Use the exact pano ID from getPanorama to avoid black-screen position mismatches.
+    if (panoId) {
+      panoramaRef.current.setPano(panoId);
+    } else {
+      panoramaRef.current.setPosition({ lat: placement.lat, lng: placement.lng });
+    }
+
     panoramaRef.current.setPov({ heading, pitch: 0 });
-  }, [available, heading, placement]);
+  }, [available, heading, panoId, placement, loading]);
 
   if (!placement) {
     return null;
@@ -66,17 +72,16 @@ export function StreetViewPanel({
           </Button>
         </div>
       </div>
+      <div ref={containerRef} className="h-full min-h-[260px] w-full" />
       {loading ? (
-        <div className="grid h-full min-h-[260px] place-items-center">
+        <div className="absolute inset-0 grid place-items-center bg-zinc-950">
           <Spinner />
         </div>
-      ) : available ? (
-        <div ref={containerRef} className="h-full min-h-[260px] w-full" />
-      ) : (
-        <div className="grid h-full min-h-[260px] place-items-center px-6 text-center text-sm text-zinc-300">
+      ) : !available ? (
+        <div className="absolute inset-0 grid place-items-center bg-zinc-950 px-6 text-center text-sm text-zinc-300">
           Street View unavailable at this location
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

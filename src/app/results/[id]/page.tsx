@@ -37,7 +37,7 @@ export default function ResultsPage() {
   }, [params.id]);
 
   return (
-    <APIProvider apiKey={apiKey} libraries={["places", "streetview"]}>
+    <APIProvider apiKey={apiKey} libraries={["places"]}>
       <ResultsWorkspace result={result} loading={loading} error={error} />
     </APIProvider>
   );
@@ -69,6 +69,7 @@ function ResultsWorkspace({
         streetViewHeading={streetView.heading}
         streetViewLoading={streetView.loading}
         streetViewAvailable={streetView.available}
+        streetViewPanoId={streetView.panoId}
         onSelectPlacement={selectPlacement}
         onPreviousStreetView={streetView.previous}
         onNextStreetView={streetView.next}

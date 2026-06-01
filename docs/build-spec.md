@@ -507,7 +507,7 @@ Returns the full stored `SignPlacementResult` or 404 if expired/not found.
 
 - Use **vector map rendering** (`mapId` required). Set `renderingType: "VECTOR"` on the Map component. This enables GPU-accelerated rendering, smooth zoom/pan, and tilt/perspective.
 - Use a **Cloud-based Map Style** via a Map ID created in Google Cloud Console (Maps > Map Styles). The style should: mute background colors, emphasize road hierarchy (arterials darker/wider than residential), suppress irrelevant POI clutter, and keep labels readable. Reference the Map ID via `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` env var.
-- The Maps JS API bootstrap URL must include the `streetview` library alongside `places`: `&libraries=places,streetview`
+- The Maps JS API bootstrap URL must include the `places` library: `&libraries=places`. Street View is built into the core Maps JS API and does not require a separate library.
 
 ### Main Page Layout (`src/app/page.tsx`)
 

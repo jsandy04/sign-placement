@@ -69,7 +69,7 @@ function adjustedScore(candidate: ScoredCandidate, selected: ScoredCandidate[]) 
 
 function descriptionFor(candidate: ScoredCandidate) {
   if (candidate.type === "property") {
-    return "Final sign at the property address.";
+    return "Mandatory — final sign at the property address.";
   }
 
   return `Place sign ${candidate.type} the ${candidate.maneuverType.replaceAll("-", " ")}${candidate.roadName ? ` near ${candidate.roadName}` : ""}.`;
