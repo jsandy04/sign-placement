@@ -63,6 +63,10 @@ ANTHROPIC_API_KEY=
 # SQLite database path (default: ./data/sign-placement.db)
 DATABASE_URL=file:./data/sign-placement.db
 
+# Google Maps Map ID (for vector rendering + cloud-based map styling)
+# Create at: Google Cloud Console → Maps → Map Styles → Create Map ID (type: JavaScript, Vector)
+NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID=
+
 # Rate limit: max analyses per IP per day (default: 10)
 RATE_LIMIT_PER_IP_PER_DAY=10
 ```
@@ -499,35 +503,57 @@ Returns the full stored `SignPlacementResult` or 404 if expired/not found.
 
 ## Frontend Component Specs
 
+### Map Rendering
+
+- Use **vector map rendering** (`mapId` required). Set `renderingType: "VECTOR"` on the Map component. This enables GPU-accelerated rendering, smooth zoom/pan, and tilt/perspective.
+- Use a **Cloud-based Map Style** via a Map ID created in Google Cloud Console (Maps > Map Styles). The style should: mute background colors, emphasize road hierarchy (arterials darker/wider than residential), suppress irrelevant POI clutter, and keep labels readable. Reference the Map ID via `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` env var.
+- The Maps JS API bootstrap URL must include the `streetview` library alongside `places`: `&libraries=places,streetview`
+
 ### Main Page Layout (`src/app/page.tsx`)
 
-Desktop (≥1024px):
+Desktop (≥1024px) — default state (no selection):
 ```
-┌──────────┬──────────────────────────┬──────────────────┐
-│ Input    │         Map              │ Results          │
-│ Panel    │                          │ Panel            │
-│ (280px)  │  • Property marker       │ (360px)          │
-│          │  • Numbered sign pins    │                  │
-│ Addr: ██ │  • Route polyline        │ Sign 1 ●         │
-│ Signs: 5 │  • Info windows on click │ "Right turn..."  │
-│          │                          │                  │
-│ [Analyze]│                          │ Sign 2 ●         │
-│          │                          │ "At roundabout"  │
-│ Status:  │                          │                  │
-│ Step 4/8 │                          │ Sign 3 ● ...     │
-└──────────┴──────────────────────────┴──────────────────┘
+┌──────────┬───────────────────────────────────┬──────────────────┐
+│ Input    │              Map                  │ Results          │
+│ Panel    │                                   │ Panel            │
+│ (280px)  │  • Property marker                │ (360px)          │
+│          │  • Numbered sign pins             │                  │
+│ Addr: ██ │  • Route polyline                 │ Sign 1 ●         │
+│ Signs: 5 │  • Vector rendering + custom style│ "Right turn..."  │
+│          │                                   │                  │
+│ [Analyze]│                                   │ Sign 2 ●         │
+│          │                                   │ "At roundabout"  │
+│ Status:  │                                   │                  │
+│ Step 4/8 │                                   │ Sign 3 ● ...     │
+└──────────┴───────────────────────────────────┴──────────────────┘
 ```
 
-Mobile (<768px): Map fills screen. Results as 3-snap bottom sheet (peek/half/full). Input as floating button that slides into form.
+Desktop — sign selected state:
+```
+┌──────────┬───────────────────────────────────┬──────────────────┐
+│ Input    │              Map                  │ Results          │
+│ Panel    │          (top ~60%)               │ Panel            │
+│ (280px)  │  • Selected pin highlighted       │ (360px)          │
+│          ├───────────────────────────────────┤                  │
+│          │       Street View Panel           │ Sign 1 ● ← active│
+│          │       (bottom ~40%, animated      │ reasoning shown  │
+│          │        slide-up from collapsed)   │                  │
+│          │  Heading: driver approach angle   │ Sign 2 ●         │
+│          │  [◀ Prev sign] [Next sign ▶]      │                  │
+└──────────┴───────────────────────────────────┴──────────────────┘
+```
+
+Mobile (<768px): Map fills screen. Results as 3-snap bottom sheet (peek/half/full). Input as floating button that slides into form. Street View opens as a full-screen sheet when triggered from a placement card.
 
 ### Component States
 
 | Component | Empty | Loading | Success | Error |
 |-----------|-------|---------|---------|-------|
-| **MapView** | Default viewport (Phoenix area) | Skeleton with pulsing marker | Pins + route polyline | Map with error banner overlay |
+| **MapView** | Default viewport (Phoenix area), vector style applied | Skeleton with pulsing marker | Pins + route polyline, vector rendering active | Map with error banner overlay |
 | **InputPanel** | Form ready, address field auto-focused | Button shows spinner + current pipeline step | Collapsed to "New Analysis" link | Form remains, error inline |
 | **ResultsPanel** | Hidden | Loading skeleton cards | Scrollable placement cards | Hidden, error shown in map |
-| **PlacementCard** | N/A | N/A | Sign #, type icon, description, "Show reasoning" toggle, score badge | N/A |
+| **PlacementCard** | N/A | N/A | Sign #, type icon, description, "Show reasoning" toggle, score badge, "Street View" button | N/A |
+| **StreetViewPanel** | Hidden (collapsed) | Panorama loading spinner | Live interactive Street View panorama at sign location | "Street View unavailable at this location" message |
 
 ### Sign Pin Color Coding
 
@@ -540,9 +566,14 @@ Mobile (<768px): Map fills screen. Results as 3-snap bottom sheet (peek/half/ful
 | Property | Red (#DC2626) | White |
 | Flagged | Orange (#EA580C) | Warning icon |
 
+Selected pin gets a white halo ring and scales up 1.2x.
+
 ### Key Interactions
-- Click sign pin → highlight placement card in sidebar
-- Click placement card → pan map to that pin + open info window
+- Click sign pin → highlight placement card in sidebar + open Street View panel oriented toward approach direction
+- Click placement card → pan map to that pin + open Street View panel
+- Street View panel: interactive panorama (not static image) — user can look around freely. Initial heading computed from approach bearing (direction driver comes from toward the turn).
+- "Street View" button on PlacementCard checks metadata first (free, no quota) — hides button if no coverage
+- Prev/Next sign buttons in Street View panel cycle through placements without closing the panel
 - Pin positions are NOT draggable in MVP (Phase 2 feature)
 - "Share" button copies `/results/[id]` URL to clipboard
 
@@ -592,18 +623,20 @@ Mobile (<768px): Map fills screen. Results as 3-snap bottom sheet (peek/half/ful
 3. `src/components/input/SignCountSelector.tsx`
 4. `src/components/input/InputPanel.tsx`
 5. `src/components/map/PropertyMarker.tsx`
-6. `src/components/map/SignMarker.tsx`
+6. `src/components/map/SignMarker.tsx` — selected state: white halo + 1.2x scale
 7. `src/components/map/RoutePolyline.tsx`
-8. `src/components/map/MapView.tsx`
-9. `src/components/results/PlacementCard.tsx`
-10. `src/components/results/PipelineProgress.tsx`
-11. `src/components/results/ResultsPanel.tsx`
-12. `src/hooks/useAnalysis.ts`
-13. `src/hooks/useMapBounds.ts`
-14. `src/app/page.tsx` — wire it all together
-15. `src/app/results/[id]/page.tsx` — shareable view
-16. `src/app/layout.tsx` — metadata + globals
-17. `src/app/globals.css` — Tailwind + map fix
+8. `src/components/map/StreetViewPanel.tsx` — interactive panorama, approach heading, prev/next controls, metadata check before render, graceful no-coverage state
+9. `src/components/map/MapView.tsx` — vector rendering (`renderingType: "VECTOR"`), Map ID from `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`, map+streetview split layout when sign selected
+10. `src/components/results/PlacementCard.tsx`
+11. `src/components/results/PipelineProgress.tsx`
+12. `src/components/results/ResultsPanel.tsx`
+13. `src/hooks/useAnalysis.ts`
+14. `src/hooks/useMapBounds.ts`
+15. `src/hooks/useStreetView.ts` — manages selected sign state, heading computation from approach bearing, metadata check
+16. `src/app/page.tsx` — wire it all together
+17. `src/app/results/[id]/page.tsx` — shareable view
+18. `src/app/layout.tsx` — metadata + globals
+19. `src/app/globals.css` — Tailwind + map fix
 
 ### Phase H: Tests (do eighth)
 1. `tests/pipeline/scorer.test.ts`
