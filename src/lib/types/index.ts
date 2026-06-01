@@ -12,6 +12,7 @@ export interface GeocodedAddress extends LatLng {
   formattedAddress: string;
   placeId: string;
   partialMatch?: boolean;
+  resultTypes?: string[];
 }
 
 export interface ApproachRoad extends LatLng {
@@ -42,6 +43,14 @@ export interface RouteStep {
   maneuverType: ManeuverType;
   roadName?: string;
   polyline?: string;
+}
+
+export interface GoogleRoute {
+  distance: number;
+  duration: number;
+  polyline: string;
+  steps: RouteStep[];
+  polylinePoints: LatLng[];
 }
 
 export interface DecisionPoint extends LatLng {
@@ -133,6 +142,11 @@ export interface LLMRankedResult {
     passes: boolean;
     notes: string;
   };
+}
+
+export interface LLMEvaluationResult {
+  result: LLMRankedResult;
+  cost: number;
 }
 
 export interface SignPlacement extends LatLng {
