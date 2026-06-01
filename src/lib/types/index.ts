@@ -178,6 +178,9 @@ export interface SignPlacementResult {
   route: RouteSummary;
   routes?: RouteSummary[];
   fullReasoning: string;
+  recommendedSignCount?: number;
+  complianceWarnings?: string[];
+  disclaimer?: string;
   degradationLevel: number;
   costs: {
     maps: number;

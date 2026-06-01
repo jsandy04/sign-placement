@@ -87,6 +87,18 @@ export function ResultsPanel({
             2 of 3 routes analyzed
           </div>
         ) : null}
+        {result.complianceWarnings && result.complianceWarnings.length > 0 ? (
+          <details className="rounded-md border border-amber-300 bg-amber-50 text-sm text-amber-900">
+            <summary className="cursor-pointer px-3 py-2 font-medium">
+              Local rules to verify before placing
+            </summary>
+            <ul className="list-disc space-y-1 px-7 pb-3 pt-1">
+              {result.complianceWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
         {result.placements.map((placement) => (
           <PlacementCard
             key={placement.id}
@@ -97,6 +109,11 @@ export function ResultsPanel({
             onStreetView={onStreetView}
           />
         ))}
+        {result.disclaimer ? (
+          <p className="border-t border-zinc-200 pt-3 text-[11px] leading-relaxed text-zinc-500">
+            {result.disclaimer}
+          </p>
+        ) : null}
       </div>
     </aside>
   );

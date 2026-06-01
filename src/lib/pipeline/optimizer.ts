@@ -11,6 +11,9 @@ export function selectTopN(candidates: ScoredCandidate[], llmResult: LLMRankedRe
   const property = candidates.find((candidate) => candidate.type === "property");
   const targetCount = property ? Math.max(0, n - 1) : n;
   const selected: ScoredCandidate[] = [];
+  // Treat the property as a fixed spacing anchor so approach signs don't crowd the front door
+  // (the final pre-turn sign was landing right on top of the property sign).
+  const spacingAnchors = property ? [property] : [];
 
   while (selected.length < targetCount) {
     const next = ordered
@@ -18,7 +21,7 @@ export function selectTopN(candidates: ScoredCandidate[], llmResult: LLMRankedRe
       .filter((candidate) => !selected.includes(candidate))
       .map((candidate) => ({
         candidate,
-        adjustedScore: adjustedScore(candidate, selected),
+        adjustedScore: adjustedScore(candidate, [...selected, ...spacingAnchors]),
       }))
       .filter(({ adjustedScore }) => adjustedScore > Number.NEGATIVE_INFINITY)
       .sort((a, b) => b.adjustedScore - a.adjustedScore)[0]?.candidate;
@@ -70,6 +73,12 @@ function adjustedScore(candidate: ScoredCandidate, selected: ScoredCandidate[]) 
 function descriptionFor(candidate: ScoredCandidate) {
   if (candidate.type === "property") {
     return "Mandatory — final sign at the property address.";
+  }
+
+  // "straight" candidates are reassurance signs on a long stretch between turns, not a turn.
+  if (candidate.maneuverType === "straight") {
+    const road = candidate.roadName && candidate.roadName !== "along the route" ? ` on ${candidate.roadName}` : "";
+    return `Confirmation sign to keep drivers on track along the straightaway${road}.`;
   }
 
   return `Place sign ${candidate.type} the ${candidate.maneuverType.replaceAll("-", " ")}${candidate.roadName ? ` near ${candidate.roadName}` : ""}.`;

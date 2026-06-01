@@ -3,9 +3,12 @@ import type { CandidateLocation, DecisionPoint, PlacementType } from "@/lib/type
 import { destinationPoint } from "@/lib/utils/geo";
 
 export function generateCandidates(points: DecisionPoint[]): CandidateLocation[] {
-  return points.flatMap((point) => {
+  // `index` makes candidate IDs globally unique. turnNumber resets per approach route, so
+  // without it two routes both produce e.g. "turn-1-before" — which collides in the optimizer
+  // lookup and violates the placements primary key when both are selected (DB insert 500).
+  return points.flatMap((point, index) => {
     if (point.isProperty) {
-      return [toCandidate(point, "property", "property", 0)];
+      return [toCandidate(point, "property", "property", 0, index)];
     }
 
     const offset = recommendedOffsetFeet(point.speedEstimate);
@@ -13,9 +16,9 @@ export function generateCandidates(points: DecisionPoint[]): CandidateLocation[]
     const after = destinationPoint(point, point.approachBearing ?? 0, AFTER_TURN_CONFIRMATION_FT);
 
     return [
-      toCandidate({ ...point, ...before }, "before", placementTypeFor(point), offset),
-      toCandidate(point, "at", placementTypeFor(point), 0),
-      toCandidate({ ...point, ...after }, "after", placementTypeFor(point), AFTER_TURN_CONFIRMATION_FT),
+      toCandidate({ ...point, ...before }, "before", placementTypeFor(point), offset, index),
+      toCandidate(point, "at", placementTypeFor(point), 0, index),
+      toCandidate({ ...point, ...after }, "after", placementTypeFor(point), AFTER_TURN_CONFIRMATION_FT, index),
     ];
   });
 }
@@ -25,9 +28,10 @@ function toCandidate(
   type: CandidateLocation["type"],
   placementType: PlacementType,
   distanceToTurn: number,
+  index: number,
 ): CandidateLocation {
   return {
-    id: `turn-${point.turnNumber}-${type}`,
+    id: `turn-${index}-${point.turnNumber}-${type}`,
     lat: point.lat,
     lng: point.lng,
     turnNumber: point.turnNumber,

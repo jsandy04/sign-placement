@@ -8,8 +8,8 @@ export function SignCountSelector({ value, disabled, onChange }: SignCountSelect
   return (
     <input
       type="number"
-      min={1}
-      max={12}
+      min={5}
+      max={15}
       disabled={disabled}
       value={value}
       onChange={(event) => onChange(Number(event.target.value))}

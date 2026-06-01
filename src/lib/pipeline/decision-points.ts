@@ -16,6 +16,13 @@ const DECISION_MANEUVERS = new Set<ManeuverType>([
   "name-change",
 ]);
 
+// Drop a "keep straight" confirmation sign roughly every quarter mile of road so long legs
+// between turns still get coverage. Without these, a route only yields ~1 selectable sign per
+// turn, so short/turn-sparse routes can't reach the agent's requested sign count.
+const CONFIRMATION_SPACING_FT = 1_320;
+// Don't place a confirmation sign right next to an actual turn or the property.
+const CONFIRMATION_MIN_GAP_FT = 300;
+
 export function extractDecisionPoints(route: RouteData): DecisionPoint[] {
   const points: DecisionPoint[] = route.steps
     .map((step, index) => toDecisionPoint(step, index + 1, cumulativeDistance(route.steps, index)))
@@ -26,6 +33,9 @@ export function extractDecisionPoints(route: RouteData): DecisionPoint[] {
   }
 
   const finalStep = route.steps.at(-1);
+  const propertyPoint = finalStep?.end;
+  const avoid = propertyPoint ? [...points, { ...propertyPoint } as DecisionPoint] : points;
+  points.push(...extractConfirmationPoints(route, points.length + 1, avoid));
 
   if (finalStep) {
     points.push({
@@ -57,6 +67,46 @@ function toDecisionPoint(step: RouteStep, turnNumber: number, distanceFromPrior:
     turnNumber,
     approachBearing: bearingDegrees(step.start, step.end),
   };
+}
+
+function extractConfirmationPoints(route: RouteData, startingTurnNumber: number, avoid: LatLng[]): DecisionPoint[] {
+  const pts = route.polylinePoints;
+  if (pts.length < 2) {
+    return [];
+  }
+
+  const out: DecisionPoint[] = [];
+  let sinceLast = 0;
+
+  for (let index = 1; index < pts.length; index += 1) {
+    sinceLast += haversineDistanceFeet(pts[index - 1], pts[index]);
+
+    if (sinceLast < CONFIRMATION_SPACING_FT) {
+      continue;
+    }
+
+    const location = pts[index];
+    const tooCloseToTurn = [...avoid, ...out].some(
+      (point) => haversineDistanceFeet(point, location) < CONFIRMATION_MIN_GAP_FT,
+    );
+
+    if (tooCloseToTurn) {
+      continue;
+    }
+
+    out.push({
+      ...location,
+      maneuverType: "straight",
+      roadName: "along the route",
+      distanceFromPrior: sinceLast,
+      speedEstimate: 25,
+      turnNumber: startingTurnNumber + out.length,
+      approachBearing: bearingDegrees(pts[index - 1], location),
+    });
+    sinceLast = 0;
+  }
+
+  return out;
 }
 
 function extractPolylineFallbackPoints(route: RouteData, startingTurnNumber: number) {

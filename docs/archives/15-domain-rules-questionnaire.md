@@ -11,6 +11,32 @@ Legend:
 
 ---
 
+## 0. Core trail strategy 🔴 (MOST IMPORTANT — decide this first)
+
+**Code assumes today:** shoots rays **1.5 miles** out from the property, finds up to **3 approach roads** in different directions (forced ≥60° apart), and splits the chosen number of signs across all of them. The result: signs start far from the house and get spread thin across multiple directions.
+
+**The problem this caused:** with only ~5 signs spread across 3 directions starting 1.5 mi out, no single path is dense enough to actually follow, and a realtor doesn't have time to drive that far placing them.
+
+**The fundamental fork (everything else depends on this):**
+- **Option A — one tight lead-in trail:** pick the single busiest approach road, start closer (~0.3–0.6 mi), place all signs densely along that one path to the door. Simple to follow, fast to place.
+- **Option B — multi-direction coverage:** catch buyers coming from several directions, accepting fewer signs per path. Needs a smaller radius and enough signs per direction to stay followable.
+
+**Current lean (Jacob, to confirm):** multi-direction is probably more useful *even if the radius is smaller* — but unsure. **Needs research + real-world input before we build it.**
+
+**Why it matters:** this single decision drives the approach-discovery radius, how signs are allocated, the gap/spacing rules, and how routes are drawn on the map.
+
+**Questions:**
+1. In your real experience, do open-house buyers usually approach from **one main road** or from **several directions**? Does it depend on the neighborhood?
+2. How do you personally decide today where to put signs and from which direction(s)?
+3. **Realtor time budget:** realistically, how many signs will an agent place, and how far from the house will they drive to place them? (This is a hard constraint.)
+4. What's the **maximum distance from the house** you'd ever place a sign? (Sets the start radius — is 1.5 mi way too far?)
+5. If multi-direction: what's the **minimum number of signs per direction** for a path to be followable (e.g. at least 2–3)? Should we only add a 2nd/3rd direction when the sign count allows it?
+6. Should the agent **choose the directions**, or should the tool auto-pick the busiest approaches?
+7. Should **sign count drive the radius** (more signs = reach further out) or should radius drive sign count?
+8. **Research pointer:** is there an industry standard, brokerage guideline, or competitor product whose approach we should look at before deciding? Note it here.
+
+---
+
 ## 1. Sign spacing & trail density 🟢
 
 **Code assumes:** hard minimum **50 ft** between signs; preferred spacing **~500 ft**; flag a gap if two consecutive signs are more than **~0.5 miles** apart.

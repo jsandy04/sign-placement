@@ -16,7 +16,7 @@ const steps = [
 
 export function useAnalysis() {
   const [address, setAddress] = useState("");
-  const [signCount, setSignCount] = useState(5);
+  const [signCount, setSignCount] = useState(8);
   const [result, setResult] = useState<SignPlacementResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();

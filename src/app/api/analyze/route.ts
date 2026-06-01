@@ -51,8 +51,8 @@ async function parseAnalyzeInput(request: NextRequest): Promise<AnalyzeInput> {
     throw new Error("Address is required");
   }
 
-  if (typeof body.signCount !== "number" || body.signCount < 1 || body.signCount > 12) {
-    throw new Error("signCount must be between 1 and 12");
+  if (typeof body.signCount !== "number" || body.signCount < 1 || body.signCount > 15) {
+    throw new Error("signCount must be between 1 and 15");
   }
 
   return {

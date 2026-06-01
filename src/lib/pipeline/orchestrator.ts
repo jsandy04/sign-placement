@@ -1,5 +1,7 @@
 import { nanoid } from "nanoid";
 import { insertAnalysis } from "@/lib/db/queries";
+import { MAX_SIGNS, MIN_SIGNS, recommendSignCount } from "@/lib/rules/placement";
+import { buildComplianceWarnings, LIABILITY_DISCLAIMER } from "@/lib/rules/ordinance-warnings";
 import { findApproachRoads } from "./approach-roads";
 import { generateCandidates } from "./candidates";
 import { geocode } from "./geocoder";
@@ -19,7 +21,10 @@ export async function analyze(input: AnalyzeInput): Promise<SignPlacementResult>
 async function runAnalysis(input: AnalyzeInput) {
   const geocoded = await geocode(input.address);
   const property = { lat: geocoded.lat, lng: geocoded.lng };
-  const approaches = await findApproachRoads(property);
+  // Keep the sign budget within followable bounds (a trail needs a floor; an agent can't
+  // realistically place more than ~15 before an open house). Drives radius + approach count.
+  const signCount = Math.min(MAX_SIGNS, Math.max(MIN_SIGNS, input.signCount));
+  const approaches = await findApproachRoads(property, signCount);
   const routes = await computeRoutes(property, approaches);
   const routeFailureCount = Math.max(0, approaches.length - routes.length);
   const allDecisionPoints = routes.flatMap((route) => route.decisionPoints);
@@ -44,10 +49,10 @@ async function runAnalysis(input: AnalyzeInput) {
     address: input.address,
     formattedAddress: geocoded.formattedAddress,
     property,
-    signCount: input.signCount,
+    signCount,
     routes,
   };
-  const llmCandidateCount = Math.max(input.signCount * 3, input.signCount);
+  const llmCandidateCount = Math.max(signCount * 3, signCount);
   let llmResult: LLMRankedResult;
   let degradationLevel = degradationForRoutes(routes, routeFailureCount);
 
@@ -59,8 +64,9 @@ async function runAnalysis(input: AnalyzeInput) {
     llmResult = deterministicLLMResult(scoredCandidates);
   }
 
-  const placements = selectTopN(scoredCandidates, llmResult, input.signCount);
+  const placements = selectTopN(scoredCandidates, llmResult, signCount);
   const primaryRoute = primaryRouteFor(routes);
+  const primaryTurns = (routes[0]?.decisionPoints ?? []).filter((point) => !point.isProperty).length;
   const result: SignPlacementResult = {
     id: nanoid(10),
     placements,
@@ -76,6 +82,9 @@ async function runAnalysis(input: AnalyzeInput) {
       duration: route.duration,
       polyline: route.polyline,
     })),
+    recommendedSignCount: recommendSignCount(primaryTurns, Math.max(0, routes.length - 1)),
+    complianceWarnings: buildComplianceWarnings(geocoded.formattedAddress),
+    disclaimer: LIABILITY_DISCLAIMER,
     fullReasoning: llmResult.overall_assessment,
     degradationLevel: Math.max(degradationLevel, routes.some((route) => route.polylineFallbackActive) ? 2 : 0),
     costs: {

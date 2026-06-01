@@ -1,4 +1,4 @@
-import { SOFT_SIGN_SPACING_FT } from "@/lib/rules/placement";
+import { idealSpacingFeet, MIN_SIGN_SPACING_FT } from "@/lib/rules/placement";
 import type { FilteredCandidate, ManeuverType, ScoredCandidate } from "@/lib/types";
 import { haversineDistanceFeet } from "@/lib/utils/geo";
 
@@ -79,14 +79,18 @@ function speedAlignmentScore(distanceToTurn: number, recommendedOffset: number) 
 }
 
 function spacingScore(candidate: FilteredCandidate, candidates: FilteredCandidate[]) {
+  const idealSpacing = idealSpacingFeet(candidate.speedEstimate);
   const nearest = candidates
     .filter((other) => other.id !== candidate.id)
     .map((other) => haversineDistanceFeet(candidate, other))
     .sort((a, b) => a - b)[0];
 
-  if (nearest === undefined || nearest >= SOFT_SIGN_SPACING_FT) {
+  if (nearest === undefined || nearest >= idealSpacing) {
     return 100;
   }
 
-  return Math.min(100, Math.max(0, ((nearest - 50) / (SOFT_SIGN_SPACING_FT - 50)) * 100));
+  return Math.min(
+    100,
+    Math.max(0, ((nearest - MIN_SIGN_SPACING_FT) / (idealSpacing - MIN_SIGN_SPACING_FT)) * 100),
+  );
 }
