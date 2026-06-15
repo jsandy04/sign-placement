@@ -69,7 +69,16 @@ async function runAnalysis(input: AnalyzeInput) {
     llmResult = deterministicLLMResult(scoredCandidates);
   }
 
-  const placements = selectTopN(scoredCandidates, llmResult, signCount, property);
+  // Turns per approach (route index → turn count) so the optimizer can size each route's
+  // followable minimum (entry + per-turn + confirmation). Confirmation/advance signs ("straight")
+  // and the property point don't count as turns.
+  const approachTurnCounts = new Map<number, number>(
+    routes.map((route, routeIndex) => [
+      routeIndex,
+      route.decisionPoints.filter((point) => !point.isProperty && point.maneuverType !== "straight").length,
+    ]),
+  );
+  const placements = selectTopN(scoredCandidates, llmResult, signCount, property, approachTurnCounts);
   // F2: only surface routes that actually received a directional sign. The optimizer concentrates
   // the budget (research Q1), so a computed route can end up with zero signs — drawing its polyline
   // would tell the agent to drive a road that has no signs on it. Keep the route↔sign mapping honest.

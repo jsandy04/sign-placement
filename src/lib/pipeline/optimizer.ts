@@ -1,4 +1,11 @@
-import { FINAL_BLOCK_FT, MIN_SIGN_SPACING_FT, SOFT_SIGN_SPACING_FT } from "@/lib/rules/placement";
+import {
+  FINAL_BLOCK_FT,
+  hardMinSignsForApproach,
+  MIN_SIGN_SPACING_FT,
+  NEAR_HOUSE_MIN,
+  NEAR_HOUSE_TARGET,
+  SOFT_SIGN_SPACING_FT,
+} from "@/lib/rules/placement";
 import type { LatLng, LLMRankedResult, ScoredCandidate, SignPlacement } from "@/lib/types";
 import { haversineDistanceFeet } from "@/lib/utils/geo";
 
@@ -7,6 +14,8 @@ export function selectTopN(
   llmResult: LLMRankedResult,
   n: number,
   propertyLocation?: LatLng,
+  // Turns per approach (index → turn count), used to size each route's followable minimum.
+  turnCounts: Map<number, number> = new Map(),
 ): SignPlacement[] {
   const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
   const llmCandidates = llmResult.selected_signs
@@ -34,11 +43,10 @@ export function selectTopN(
     groups.set(key, group);
   }
 
-  // Reserve ~40% of the budget for the final block near the property (research Q5): without this,
-  // arterial/high-traffic candidates win on score and the door gets no coverage ("none in the
-  // neighborhood"). Phase 1 fills near-house slots first, phase 2 fills the rest.
-  const nearReserve = propertyPoint ? Math.min(targetCount, Math.max(2, Math.round(targetCount * 0.4))) : 0;
-  const selected = allocateAcrossApproaches(groups, spacingAnchors, targetCount, propertyPoint, nearReserve);
+  // Turn-driven allocation (new-tmfa.md Q2/Q5): fund each approach at its followable minimum in
+  // priority order, dropping any route the budget can't fund, then saturate the shared near-house
+  // block. Replaces the old flat 40% near-house reserve.
+  const selected = allocateAcrossApproaches(groups, turnCounts, spacingAnchors, targetCount, propertyPoint);
 
   if (property) {
     selected.push(property);
@@ -62,21 +70,24 @@ export function selectTopN(
     }));
 }
 
-// Round-robin allocation across approaches, in two phases:
-//   Phase 1 — fill the near-house reserve (only candidates within the final block) so the door
-//             always gets coverage (research Q5 / fixes the "none in the neighborhood" skew).
-//   Phase 2 — fill the remaining budget with the best-spaced candidates from any zone.
-// Within each phase, cycling through approaches keeps a route from hogging the budget; a route
-// only wins extra signs once the others are exhausted, so we avoid lonely 1-sign spurs.
+// Turn-driven allocation (new-tmfa.md Q2/Q5). Multi-route coverage is the goal, but only for routes
+// the budget can make followable:
+//   1. In priority (traffic) order, fund each approach at its turn-driven minimum (entry + per-turn
+//      + confirmation), always keeping the near-house minimum in reserve. A route the budget can't
+//      fund is dropped, not opened as an unfollowable spur.
+//   2. Build each funded approach's trail from signs OUTSIDE the final block.
+//   3. Saturate the shared near-house block across the funded approaches.
+//   4. Spend any leftover budget deepening the funded trails.
 function allocateAcrossApproaches(
   groups: Map<number, ScoredCandidate[]>,
+  turnCounts: Map<number, number>,
   spacingAnchors: ScoredCandidate[],
   targetCount: number,
   propertyPoint: LatLng | undefined,
-  nearReserve: number,
 ): ScoredCandidate[] {
   const selected: ScoredCandidate[] = [];
-  const approachKeys = [...groups.keys()];
+  // Sort keys ascending so the busiest arterial (approachIndex 0) is funded first.
+  const approachKeys = [...groups.keys()].sort((a, b) => a - b);
 
   const fits = (candidate: ScoredCandidate) =>
     !selected.includes(candidate) &&
@@ -84,12 +95,63 @@ function allocateAcrossApproaches(
   const isNearHouse = (candidate: ScoredCandidate) =>
     Boolean(propertyPoint) && haversineDistanceFeet(candidate, propertyPoint!) <= FINAL_BLOCK_FT;
 
-  // Phase 1: near-house reserve (everything added here is near, so selected length == near count).
-  roundRobinFill(selected, approachKeys, groups, Math.min(nearReserve, targetCount), (c) => fits(c) && isNearHouse(c));
-  // Phase 2: fill the rest from any zone.
-  roundRobinFill(selected, approachKeys, groups, targetCount, fits);
+  // The property sign (added by the caller) is itself a near-house sign, so we only reserve the REST
+  // of the near-house block here.
+  const nearMinExtra = propertyPoint ? Math.max(0, NEAR_HOUSE_MIN - 1) : 0;
+  const nearTargetExtra = propertyPoint ? Math.max(0, NEAR_HOUSE_TARGET - 1) : 0;
+
+  // Step 1: pick which approaches the budget can fund at their followable minimum, keeping the
+  // near-house minimum in reserve.
+  const fundedKeys: number[] = [];
+  let approachBudget = targetCount - nearMinExtra;
+  for (const key of approachKeys) {
+    const hardMin = hardMinSignsForApproach(turnCounts.get(key) ?? 0);
+    if (approachBudget >= hardMin) {
+      fundedKeys.push(key);
+      approachBudget -= hardMin;
+    } else {
+      break;
+    }
+  }
+  // Always fund at least the busiest approach, even on a tight budget.
+  if (fundedKeys.length === 0 && approachKeys.length > 0) {
+    fundedKeys.push(approachKeys[0]);
+  }
+
+  // Step 2: build each funded approach's trail (signs outside the final block), capped so the
+  // near-house minimum survives.
+  const trailLimit = Math.max(0, targetCount - nearMinExtra);
+  for (const key of fundedKeys) {
+    const target = Math.min(trailLimit, selected.length + hardMinSignsForApproach(turnCounts.get(key) ?? 0));
+    fillFromApproach(selected, groups.get(key) ?? [], target, (c) => fits(c) && !isNearHouse(c));
+  }
+
+  // Step 3: saturate the shared near-house block across the funded approaches.
+  const nearLimit = Math.min(targetCount, selected.length + nearTargetExtra);
+  roundRobinFill(selected, fundedKeys, groups, nearLimit, (c) => fits(c) && isNearHouse(c));
+
+  // Step 4: spend any leftover budget deepening the funded trails.
+  roundRobinFill(selected, fundedKeys, groups, targetCount, fits);
 
   return selected;
+}
+
+// Fill from a single approach's candidates (in priority order) until `limit` total signs are
+// selected. Used to build one route's trail up to its followable minimum.
+function fillFromApproach(
+  selected: ScoredCandidate[],
+  candidates: ScoredCandidate[],
+  limit: number,
+  eligible: (candidate: ScoredCandidate) => boolean,
+) {
+  for (const candidate of candidates) {
+    if (selected.length >= limit) {
+      break;
+    }
+    if (eligible(candidate)) {
+      selected.push(candidate);
+    }
+  }
 }
 
 function roundRobinFill(

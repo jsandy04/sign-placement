@@ -10,7 +10,12 @@ const RAY_BEARINGS = [0, 45, 90, 135, 180, 225, 270, 315];
 // relaxed to a 30° floor when backfilling so we never sacrifice a busy arterial for spread.
 const MIN_APPROACH_SEPARATION_DEG = 60;
 const HARD_APPROACH_SEPARATION_DEG = 30;
-const MAX_APPROACH_ROADS = 3;
+const MAX_APPROACH_ROADS = 4;
+// Same-road dedup is bearing-aware (new-tmfa.md Q1): NB and SB traffic on the same arterial are two
+// distinct approaches ("half the audience never sees the sign" with one-direction coverage). Only
+// merge two same-named approaches when they come from roughly the SAME direction (within 40°); when
+// their bearings are opposed, keep both.
+const SAME_ROAD_BEARING_MERGE_THRESHOLD = 40;
 // Minimum speed for a step to count as a real arterial (vs. a residential street).
 const ARTERIAL_MPH = 30;
 // Minimum trail length: the anchor must sit at least this far back from the property so there's
@@ -94,9 +99,7 @@ function selectDistinctApproaches(candidates: ApproachCandidate[], maxApproaches
     const tooClose = selected.some(
       (chosen) => bearingDeltaDegrees(chosen.bearing, candidate.bearing) < MIN_APPROACH_SEPARATION_DEG,
     );
-    const duplicateRoad = selected.some(
-      (chosen) => chosen.name !== "Approach road" && chosen.name === candidate.name,
-    );
+    const duplicateRoad = selected.some((chosen) => sameDirectionDuplicate(chosen, candidate));
 
     if (!tooClose && !duplicateRoad) {
       selected.push(candidate);
@@ -116,9 +119,7 @@ function selectDistinctApproaches(candidates: ApproachCandidate[], maxApproaches
       const tooClose = selected.some(
         (chosen) => bearingDeltaDegrees(chosen.bearing, candidate.bearing) < HARD_APPROACH_SEPARATION_DEG,
       );
-      const duplicateRoad = selected.some(
-        (chosen) => chosen.name !== "Approach road" && chosen.name === candidate.name,
-      );
+      const duplicateRoad = selected.some((chosen) => sameDirectionDuplicate(chosen, candidate));
       if (!tooClose && !duplicateRoad) {
         selected.push(candidate);
       }
@@ -126,6 +127,16 @@ function selectDistinctApproaches(candidates: ApproachCandidate[], maxApproaches
   }
 
   return selected;
+}
+
+// Two approaches are the SAME approach only when they're the same named road AND come from roughly
+// the same direction. Opposite directions on one arterial (NB vs SB 75th Ave) are kept as distinct
+// approaches so the trail catches traffic from both sides (new-tmfa.md Q1).
+function sameDirectionDuplicate(chosen: ApproachCandidate, candidate: ApproachCandidate) {
+  if (chosen.name === "Approach road" || chosen.name !== candidate.name) {
+    return false;
+  }
+  return bearingDeltaDegrees(chosen.bearing, candidate.bearing) < SAME_ROAD_BEARING_MERGE_THRESHOLD;
 }
 
 // Walk the route polyline back from the property (the route runs approach → property, so its last
@@ -186,6 +197,14 @@ function fastestStep(steps: { distance: number; duration: number; roadName?: str
   return best;
 }
 
+// The best sign corridor is a major SURFACE arterial: fast enough to carry real traffic, slow
+// enough that drivers can read a yard sign and you can legally place one. Score therefore PEAKS at
+// arterial speed and DROPS for freeway speed — you can't sign a freeway, and anchoring a trail on
+// one sends the agent to a road no sign can sit on. A monotonic speed score wrongly tied freeways
+// with arterials and let the 101 outrank 75th Ave.
+const FREEWAY_MPH = 57; // at/above this it's effectively limited-access — not a sign corridor
+const ARTERIAL_MIN_MPH = 35; // major surface arterial floor — the ideal corridor
+
 function estimateRoadClassScore(distanceMeters: number, durationSeconds: number) {
   if (durationSeconds <= 0) {
     return 0;
@@ -193,13 +212,17 @@ function estimateRoadClassScore(distanceMeters: number, durationSeconds: number)
 
   const mph = (distanceMeters / durationSeconds) * 2.23694;
 
-  if (mph >= 40) {
-    return 100;
+  if (mph >= FREEWAY_MPH) {
+    return 25; // freeway / limited-access — deprioritize hard
+  }
+
+  if (mph >= ARTERIAL_MIN_MPH) {
+    return 100; // major surface arterial — the ideal sign corridor
   }
 
   if (mph >= 30) {
-    return 65;
+    return 65; // collector
   }
 
-  return 35;
+  return 35; // residential
 }

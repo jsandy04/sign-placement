@@ -2,7 +2,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { ContentBlock, Tool } from "@anthropic-ai/sdk/resources/messages/messages";
 import type { LLMEvaluationResult, LLMRankedResult, RouteContext, ScoredCandidate } from "@/lib/types";
 
-const MODEL = "claude-sonnet-4-6";
+// The LLM is a thin re-ranking + rationale layer over already-scored candidates — the real
+// reasoning (geometry, scoring, turn-driven allocation) is deterministic. Haiku is right-sized for
+// that job and ~3x cheaper than Sonnet, which matters at scale. A deterministic fallback covers
+// failures, so quality degrades gracefully.
+const MODEL = "claude-haiku-4-5";
 const MAX_TOKENS = 2_000;
 const TEMPERATURE = 0.2;
 const LLM_ATTEMPTS = 3;
