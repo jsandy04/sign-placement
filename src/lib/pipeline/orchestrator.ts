@@ -78,10 +78,10 @@ async function runAnalysis(input: AnalyzeInput) {
       .filter((placement) => placement.placementType !== "property")
       .map((placement) => placement.approachIndex ?? 0),
   );
-  const usedRoutes = routes.filter((_, index) => usedApproachIndices.has(index));
-  // Guard: if nothing mapped to a route (e.g. only the house sign survived), keep the primary route
-  // so the map still has something to anchor on.
-  const reportedRoutes = usedRoutes.length > 0 ? usedRoutes : routes.slice(0, 1);
+  // If nothing mapped to a route (only the house sign survived — a degenerate approach with no
+  // followable trail), report no routes rather than drawing a sign-less polyline. The map still
+  // anchors on the property marker, and we keep the route↔sign mapping honest (no phantom route).
+  const reportedRoutes = routes.filter((_, index) => usedApproachIndices.has(index));
   const primaryRoute = primaryRouteFor(reportedRoutes);
   const primaryTurns = (reportedRoutes[0]?.decisionPoints ?? []).filter((point) => !point.isProperty).length;
   const result: SignPlacementResult = {

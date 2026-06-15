@@ -1,3 +1,4 @@
+import { MIN_SIGN_SPACING_FT } from "@/lib/rules/placement";
 import type { DecisionPoint, LatLng, ManeuverType, RouteData, RouteStep } from "@/lib/types";
 import { bearingDegrees, bearingDeltaDegrees, haversineDistanceFeet } from "@/lib/utils/geo";
 
@@ -131,6 +132,23 @@ function extractAdvancePoints(route: RouteData, startingTurnNumber: number, coun
     return [];
   }
 
+  // Total drivable length of this (often short) route. Short approaches — a house just off the
+  // arterial, an apartment with no internal turns — are exactly where the house-only failure bites.
+  let totalFt = 0;
+  for (let index = 1; index < pts.length; index += 1) {
+    totalFt += haversineDistanceFeet(pts[index - 1], pts[index]);
+  }
+  // Genuinely degenerate route (anchor collapsed onto the property): nothing to place on.
+  if (totalFt < MIN_SIGN_SPACING_FT) {
+    return [];
+  }
+
+  // Use the fixed advance spacing when the route is long enough; otherwise divide the available
+  // length so even a short route still yields `count` evenly-spaced advance signs. Without this a
+  // ~360 ft route can't fit a single 400 ft-spaced sign and collapses to a house-only result (F1).
+  const reach = Math.min(totalFt, ADVANCE_MAX_BACK_FT);
+  const spacing = Math.min(ADVANCE_SPACING_FT, reach / (count + 1));
+
   const out: DecisionPoint[] = [];
   let sinceLast = 0;
   let backFromProperty = 0;
@@ -143,7 +161,7 @@ function extractAdvancePoints(route: RouteData, startingTurnNumber: number, coun
     if (backFromProperty > ADVANCE_MAX_BACK_FT) {
       break;
     }
-    if (sinceLast < ADVANCE_SPACING_FT) {
+    if (sinceLast < spacing) {
       continue;
     }
 
