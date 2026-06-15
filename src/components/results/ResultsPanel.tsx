@@ -87,6 +87,24 @@ export function ResultsPanel({
             2 of 3 routes analyzed
           </div>
         ) : null}
+        {(() => {
+          const available = (result.routes ?? []).filter((route) => route.status === "available");
+          if (available.length === 0) {
+            return null;
+          }
+          const names = available.map((route) => route.approachRoad).join(", ");
+          return (
+            <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
+              <p className="font-medium">
+                {available.length} more approach{available.length > 1 ? "es" : ""} available
+              </p>
+              <p className="mt-1 text-xs">
+                The signs cover the strongest route. {names} {available.length > 1 ? "are" : "is"} also a real way in —
+                use {result.recommendedSignCount} signs to cover {available.length > 1 ? "them all" : "it too"}.
+              </p>
+            </div>
+          );
+        })()}
         {result.complianceWarnings && result.complianceWarnings.length > 0 ? (
           <details className="rounded-md border border-amber-300 bg-amber-50 text-sm text-amber-900">
             <summary className="cursor-pointer px-3 py-2 font-medium">

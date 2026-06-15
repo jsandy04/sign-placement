@@ -71,7 +71,8 @@ export function MapView({
             <RoutePolyline
               key={`${route.approachRoad}-${index}`}
               encodedPath={route.polyline}
-              primary={index === 0}
+              // Discovered-but-unfunded approaches render faded; the lead funded route is bold.
+              variant={route.status === "available" ? "available" : index === 0 ? "primary" : "funded"}
             />
           ))}
           {placements.map((placement) => (

@@ -79,7 +79,13 @@ function scoreResult(item, result) {
     types[p.placementType] = (types[p.placementType] ?? 0) + 1;
   }
 
-  const routesReported = result.routes?.length ?? 0;
+  // "available" routes are discovered-but-unfunded approaches we surface on purpose (faded, with a
+  // "needs +N signs" hint) — they're EXPECTED to have no signs, so they're not phantom routes. Only
+  // funded routes should carry signs; a funded route with none is the real phantom case.
+  const allRoutes = result.routes ?? [];
+  const fundedRoutes = allRoutes.filter((route) => route.status !== "available");
+  const availableRoutes = allRoutes.length - fundedRoutes.length;
+  const routesReported = fundedRoutes.length;
   const routesWithSigns = Object.keys(byApproach).length;
 
   // Flags = the things we actually care about going wrong.
@@ -96,6 +102,7 @@ function scoreResult(item, result) {
   return {
     routesReported,
     routesWithSigns,
+    availableRoutes,
     byApproach,
     placed: placements.length,
     near,
@@ -144,7 +151,8 @@ async function main() {
       continue;
     }
     const s = row.score;
-    const routes = `${s.routesWithSigns}/${s.routesReported}`;
+    // funded-with-signs / funded-reported (+N surfaced "available" approaches)
+    const routes = `${s.routesWithSigns}/${s.routesReported}${s.availableRoutes ? `+${s.availableRoutes}` : ""}`;
     const dist = `${s.near}/${s.mid}/${s.far}`;
     console.log(
       [
@@ -171,7 +179,9 @@ async function main() {
     `Ran ${rows.length} | ok ${ok.length} | errors ${rows.length - ok.length} | flag tally:`,
     Object.keys(flagTally).length ? flagTally : "none",
   );
-  console.log("Legend: dist(N/M/F) = signs Near(<=800ft) / Mid / Far(>0.5mi) from house. routes = withSigns/reported.");
+  console.log(
+    "Legend: dist(N/M/F) = signs Near(<=800ft) / Mid / Far(>0.5mi) from house. routes = funded-withSigns/funded-reported(+N surfaced-but-unfunded approaches).",
+  );
 
   const outPath = join(HERE, "eval-results.json");
   writeFileSync(outPath, JSON.stringify(rows, null, 2));

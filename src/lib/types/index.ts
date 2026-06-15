@@ -176,6 +176,11 @@ export interface RouteSummary {
   distance: number;
   duration: number;
   polyline: string;
+  // "funded" routes carry signs and render solid; "available" routes are approaches the engine
+  // discovered but the sign budget couldn't make followable — rendered faded, with `signsToUnlock`
+  // being the extra signs they'd need (design-thesis "surface, don't mandate").
+  status?: "funded" | "available";
+  signsToUnlock?: number;
 }
 
 export interface SignPlacementResult {

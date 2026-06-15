@@ -31,8 +31,11 @@ interface ApproachCandidate extends ApproachRoad {
 }
 
 export async function findApproachRoads(origin: LatLng, signCount: number): Promise<ApproachRoad[]> {
-  // Sign budget governs how many directions the trail can cover (min ~3 signs per direction).
-  const maxApproaches = Math.min(MAX_APPROACH_ROADS, maxApproachesForSignCount(signCount));
+  // Discover MORE approaches than the budget can fund (always aim for ~3) so the pipeline can
+  // SURFACE the unfunded ones to the agent — faded, with a "needs +N signs" hint — instead of
+  // hiding them (design-thesis "surface, don't mandate"). The optimizer still funds only the routes
+  // the budget can make followable.
+  const maxApproaches = Math.min(MAX_APPROACH_ROADS, Math.max(3, maxApproachesForSignCount(signCount)));
   // Sign budget also drives how far out we search (research §0.7): a tight budget stays close
   // (~0.5 mi), a large budget reaches further (up to 1 mi). The trail is still anchored at the
   // arterial turn-off, so this controls reach without pushing signs far from the house.

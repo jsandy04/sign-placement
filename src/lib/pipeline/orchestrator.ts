@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { insertAnalysis } from "@/lib/db/queries";
-import { MAX_SIGNS, MIN_SIGNS, recommendSignCount } from "@/lib/rules/placement";
+import { hardMinSignsForApproach, MAX_SIGNS, MIN_SIGNS, NEAR_HOUSE_TARGET } from "@/lib/rules/placement";
 import { buildComplianceWarnings, LIABILITY_DISCLAIMER } from "@/lib/rules/ordinance-warnings";
 import { findApproachRoads } from "./approach-roads";
 import { generateCandidates } from "./candidates";
@@ -10,7 +10,14 @@ import { llmEvaluate } from "./llm";
 import { selectTopN } from "./optimizer";
 import { computeRoutes } from "./routing";
 import { scoreCandidates } from "./scorer";
-import type { AnalyzeInput, LLMRankedResult, RouteData, ScoredCandidate, SignPlacementResult } from "@/lib/types";
+import type {
+  AnalyzeInput,
+  LLMRankedResult,
+  RouteData,
+  RouteSummary,
+  ScoredCandidate,
+  SignPlacementResult,
+} from "@/lib/types";
 
 const PIPELINE_TIMEOUT_MS = 60_000;
 
@@ -79,20 +86,41 @@ async function runAnalysis(input: AnalyzeInput) {
     ]),
   );
   const placements = selectTopN(scoredCandidates, llmResult, signCount, property, approachTurnCounts);
-  // F2: only surface routes that actually received a directional sign. The optimizer concentrates
-  // the budget (research Q1), so a computed route can end up with zero signs — drawing its polyline
-  // would tell the agent to drive a road that has no signs on it. Keep the route↔sign mapping honest.
   const usedApproachIndices = new Set(
     placements
       .filter((placement) => placement.placementType !== "property")
       .map((placement) => placement.approachIndex ?? 0),
   );
-  // If nothing mapped to a route (only the house sign survived — a degenerate approach with no
-  // followable trail), report no routes rather than drawing a sign-less polyline. The map still
-  // anchors on the property marker, and we keep the route↔sign mapping honest (no phantom route).
-  const reportedRoutes = routes.filter((_, index) => usedApproachIndices.has(index));
-  const primaryRoute = primaryRouteFor(reportedRoutes);
-  const primaryTurns = (reportedRoutes[0]?.decisionPoints ?? []).filter((point) => !point.isProperty).length;
+
+  // Surface EVERY discovered approach (design-thesis "surface, don't mandate"). A funded route
+  // carries signs and renders solid; a discovered-but-unfunded approach is returned as "available"
+  // with the extra signs it would take to make it followable, so the agent sees the option (faded on
+  // the map) instead of a hidden constraint. We never place signs below the followability floor.
+  const fundedRoutes = routes.filter((_, index) => usedApproachIndices.has(index));
+  const reportedRoutes: RouteSummary[] = routes
+    .map((route, index) => {
+      const funded = usedApproachIndices.has(index);
+      return {
+        approachRoad: route.approachRoad,
+        distance: route.distance,
+        duration: route.duration,
+        polyline: route.polyline,
+        status: funded ? ("funded" as const) : ("available" as const),
+        signsToUnlock: funded ? undefined : hardMinSignsForApproach(approachTurnCounts.get(index) ?? 0),
+      };
+    })
+    // Funded (solid) routes lead so the map's primary styling lands on a route that has signs.
+    .sort((a, b) => (a.status === b.status ? 0 : a.status === "funded" ? -1 : 1));
+
+  const primaryRoute = primaryRouteFor(fundedRoutes);
+  // Budget that would make every discovered approach followable: each route's turn-driven minimum
+  // plus the shared near-house block. Surfaced as the recommendation so the agent knows what unlocks
+  // the unfunded approaches.
+  const signsToCoverAllApproaches = Math.min(
+    MAX_SIGNS,
+    routes.reduce((sum, _route, index) => sum + hardMinSignsForApproach(approachTurnCounts.get(index) ?? 0), 0) +
+      NEAR_HOUSE_TARGET,
+  );
   const result: SignPlacementResult = {
     id: nanoid(10),
     placements,
@@ -102,17 +130,12 @@ async function runAnalysis(input: AnalyzeInput) {
       duration: primaryRoute.duration,
       polyline: primaryRoute.polyline,
     },
-    routes: reportedRoutes.map((route) => ({
-      approachRoad: route.approachRoad,
-      distance: route.distance,
-      duration: route.duration,
-      polyline: route.polyline,
-    })),
-    recommendedSignCount: recommendSignCount(primaryTurns, Math.max(0, reportedRoutes.length - 1)),
+    routes: reportedRoutes,
+    recommendedSignCount: signsToCoverAllApproaches,
     complianceWarnings: buildComplianceWarnings(geocoded.formattedAddress),
     disclaimer: LIABILITY_DISCLAIMER,
     fullReasoning: llmResult.overall_assessment,
-    degradationLevel: Math.max(degradationLevel, reportedRoutes.some((route) => route.polylineFallbackActive) ? 2 : 0),
+    degradationLevel: Math.max(degradationLevel, fundedRoutes.some((route) => route.polylineFallbackActive) ? 2 : 0),
     costs: {
       maps: 0,
       llm: 0,
