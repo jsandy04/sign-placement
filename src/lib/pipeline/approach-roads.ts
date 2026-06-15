@@ -1,7 +1,7 @@
 import { computeRoutes as computeGoogleRoute } from "@/lib/services/google-maps";
 import { approachRadiusForSignCount, maxApproachesForSignCount } from "@/lib/rules/placement";
 import type { ApproachRoad, LatLng, RouteStep } from "@/lib/types";
-import { bearingDeltaDegrees, destinationPoint } from "@/lib/utils/geo";
+import { bearingDeltaDegrees, destinationPoint, haversineDistanceFeet } from "@/lib/utils/geo";
 
 // Shoot 8 rays (every 45°) instead of 4 cardinals so diagonal arterials aren't missed.
 const RAY_BEARINGS = [0, 45, 90, 135, 180, 225, 270, 315];
@@ -13,6 +13,12 @@ const HARD_APPROACH_SEPARATION_DEG = 30;
 const MAX_APPROACH_ROADS = 3;
 // Minimum speed for a step to count as a real arterial (vs. a residential street).
 const ARTERIAL_MPH = 30;
+// Minimum trail length: the anchor must sit at least this far back from the property so there's
+// room for at least a couple of signs. Without this, a fast road that runs right to the door (the
+// rural case) anchors on the property itself, collapsing the route to 0 ft and yielding a
+// house-only result. When the natural turn-off lands closer than this, we walk back along the
+// route to give the trail a body.
+const MIN_TRAIL_FT = 1_000;
 
 interface ApproachCandidate extends ApproachRoad {
   bearing: number;
@@ -36,7 +42,13 @@ export async function findApproachRoads(origin: LatLng, signCount: number): Prom
       // Anchor the trail where the driver TURNS OFF the arterial toward the house, not at the
       // raw ray endpoint (which can sit deep inside the subdivision) and not far out on the
       // arterial. Falls back to the snapped route start if no real arterial is on this route.
-      const approachPoint = arterialTurnOff(route.steps) ?? route.steps[0]?.start ?? rayEnd;
+      const rawAnchor = arterialTurnOff(route.steps) ?? route.steps[0]?.start ?? rayEnd;
+      // Guarantee a followable trail length: if the turn-off collapsed onto the property (a fast
+      // rural road running to the door), walk back along the route so the trail has a body.
+      const approachPoint =
+        haversineDistanceFeet(rawAnchor, origin) >= MIN_TRAIL_FT
+          ? rawAnchor
+          : pointBackFromProperty(route.polylinePoints, MIN_TRAIL_FT) ?? rawAnchor;
 
       return {
         name: arterial?.roadName ?? route.steps[0]?.roadName ?? "Approach road",
@@ -114,6 +126,26 @@ function selectDistinctApproaches(candidates: ApproachCandidate[], maxApproaches
   }
 
   return selected;
+}
+
+// Walk the route polyline back from the property (the route runs approach → property, so its last
+// point is the property) until we're at least `minFt` away, and return that point. Used to pull a
+// collapsed anchor back from the door so the trail has room for signs. Falls back to the farthest
+// point on the route when the whole route is shorter than `minFt`.
+function pointBackFromProperty(polylinePoints: LatLng[], minFt: number): LatLng | undefined {
+  if (polylinePoints.length < 2) {
+    return undefined;
+  }
+
+  let accumulated = 0;
+  for (let index = polylinePoints.length - 1; index > 0; index -= 1) {
+    accumulated += haversineDistanceFeet(polylinePoints[index], polylinePoints[index - 1]);
+    if (accumulated >= minFt) {
+      return polylinePoints[index - 1];
+    }
+  }
+
+  return polylinePoints[0];
 }
 
 // Find where the driver leaves the arterial and heads toward the house: the END of the last
