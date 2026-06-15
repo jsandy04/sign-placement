@@ -24,6 +24,10 @@ const DECISION_MANEUVERS = new Set<ManeuverType>([
 const CONFIRMATION_SPACING_FT = 660;
 // Don't place a confirmation sign right next to an actual turn or the property.
 const CONFIRMATION_MIN_GAP_FT = 300;
+// F1 safety net: tighter spacing for advance signs generated on turn-sparse routes, and how far
+// back from the property we'll walk to place them (stay within the near-approach zone).
+const ADVANCE_SPACING_FT = 400;
+const ADVANCE_MAX_BACK_FT = 2_640;
 
 export function extractDecisionPoints(route: RouteData): DecisionPoint[] {
   const points: DecisionPoint[] = route.steps
@@ -38,6 +42,13 @@ export function extractDecisionPoints(route: RouteData): DecisionPoint[] {
   const propertyPoint = finalStep?.end;
   const avoid = propertyPoint ? [...points, { ...propertyPoint } as DecisionPoint] : points;
   points.push(...extractConfirmationPoints(route, points.length + 1, avoid));
+
+  // F1 safety net: if a route is so short/turn-sparse that it produced no real guidance points,
+  // the agent would be left with only a house sign. Generate near-approach advance signs walking
+  // back from the property so every route is at least minimally followable.
+  if (propertyPoint && points.length < 2) {
+    points.push(...extractAdvancePoints(route, points.length + 1, 3 - points.length));
+  }
 
   if (finalStep) {
     points.push({
@@ -104,6 +115,47 @@ function extractConfirmationPoints(route: RouteData, startingTurnNumber: number,
       speedEstimate: 25,
       turnNumber: startingTurnNumber + out.length,
       approachBearing: bearingDegrees(pts[index - 1], location),
+    });
+    sinceLast = 0;
+  }
+
+  return out;
+}
+
+// Walk the route polyline backward from the property, dropping advance signs at ~400 ft spacing
+// within the near-approach zone. Used only as the F1 safety net when a route yields no real
+// guidance points, so the trail near the destination is at least followable.
+function extractAdvancePoints(route: RouteData, startingTurnNumber: number, count: number): DecisionPoint[] {
+  const pts = route.polylinePoints;
+  if (count <= 0 || pts.length < 2) {
+    return [];
+  }
+
+  const out: DecisionPoint[] = [];
+  let sinceLast = 0;
+  let backFromProperty = 0;
+
+  for (let index = pts.length - 1; index > 0 && out.length < count; index -= 1) {
+    const segment = haversineDistanceFeet(pts[index], pts[index - 1]);
+    sinceLast += segment;
+    backFromProperty += segment;
+
+    if (backFromProperty > ADVANCE_MAX_BACK_FT) {
+      break;
+    }
+    if (sinceLast < ADVANCE_SPACING_FT) {
+      continue;
+    }
+
+    const location = pts[index - 1];
+    out.push({
+      ...location,
+      maneuverType: "straight",
+      roadName: "approaching the property",
+      distanceFromPrior: sinceLast,
+      speedEstimate: 25,
+      turnNumber: startingTurnNumber + out.length,
+      approachBearing: bearingDegrees(pts[index - 1], pts[index]),
     });
     sinceLast = 0;
   }

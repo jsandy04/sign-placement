@@ -1,8 +1,8 @@
 import { idealSpacingFeet, MIN_SIGN_SPACING_FT } from "@/lib/rules/placement";
-import type { FilteredCandidate, ManeuverType, ScoredCandidate } from "@/lib/types";
+import type { FilteredCandidate, LatLng, ManeuverType, ScoredCandidate } from "@/lib/types";
 import { haversineDistanceFeet } from "@/lib/utils/geo";
 
-export function scoreCandidates(filtered: FilteredCandidate[]): ScoredCandidate[] {
+export function scoreCandidates(filtered: FilteredCandidate[], property?: LatLng): ScoredCandidate[] {
   return filtered
     .map((candidate) => {
       const scoreBreakdown = {
@@ -11,13 +11,17 @@ export function scoreCandidates(filtered: FilteredCandidate[]): ScoredCandidate[
         visibilityQuality: visibilityScore(candidate.distanceToTurn),
         approachSpeedAlignment: speedAlignmentScore(candidate.distanceToTurn, candidate.recommendedOffset),
         signSpacing: spacingScore(candidate, filtered),
+        proximityToProperty: proximityScore(candidate, property),
       };
+      // Rebalanced to pull signs toward the property (research Q5 / F3): the trail was skewing
+      // onto fast arterials because traffic/speed dominated. Proximity now earns real weight.
       const score =
-        scoreBreakdown.decisionPointCriticality * 0.3 +
-        scoreBreakdown.trafficVolume * 0.25 +
+        scoreBreakdown.decisionPointCriticality * 0.25 +
+        scoreBreakdown.trafficVolume * 0.2 +
         scoreBreakdown.visibilityQuality * 0.2 +
         scoreBreakdown.approachSpeedAlignment * 0.15 +
-        scoreBreakdown.signSpacing * 0.1;
+        scoreBreakdown.signSpacing * 0.1 +
+        scoreBreakdown.proximityToProperty * 0.1;
 
       return {
         ...candidate,
@@ -26,6 +30,24 @@ export function scoreCandidates(filtered: FilteredCandidate[]): ScoredCandidate[
       };
     })
     .sort((a, b) => b.score - a.score);
+}
+
+// Reward candidates near the destination so the final block gets saturated (research Q5):
+// 100 within 400 ft, linear decline to 0 at 0.5 mi. Neutral (50) when no property is known.
+function proximityScore(candidate: LatLng, property?: LatLng) {
+  if (!property) {
+    return 50;
+  }
+
+  const distance = haversineDistanceFeet(candidate, property);
+  if (distance <= 400) {
+    return 100;
+  }
+  if (distance >= 2_640) {
+    return 0;
+  }
+
+  return Math.round(100 - ((distance - 400) / (2_640 - 400)) * 100);
 }
 
 function decisionPointScore(maneuverType: ManeuverType) {

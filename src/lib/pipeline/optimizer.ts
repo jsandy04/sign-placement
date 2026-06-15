@@ -1,8 +1,13 @@
-import { MIN_SIGN_SPACING_FT, SOFT_SIGN_SPACING_FT } from "@/lib/rules/placement";
-import type { LLMRankedResult, ScoredCandidate, SignPlacement } from "@/lib/types";
+import { FINAL_BLOCK_FT, MIN_SIGN_SPACING_FT, SOFT_SIGN_SPACING_FT } from "@/lib/rules/placement";
+import type { LatLng, LLMRankedResult, ScoredCandidate, SignPlacement } from "@/lib/types";
 import { haversineDistanceFeet } from "@/lib/utils/geo";
 
-export function selectTopN(candidates: ScoredCandidate[], llmResult: LLMRankedResult, n: number): SignPlacement[] {
+export function selectTopN(
+  candidates: ScoredCandidate[],
+  llmResult: LLMRankedResult,
+  n: number,
+  propertyLocation?: LatLng,
+): SignPlacement[] {
   const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
   const llmCandidates = llmResult.selected_signs
     .map((selection) => byId.get(selection.candidate_id))
@@ -13,6 +18,8 @@ export function selectTopN(candidates: ScoredCandidate[], llmResult: LLMRankedRe
   const targetCount = property ? Math.max(0, n - 1) : n;
   // Treat the property as a fixed spacing anchor so approach signs don't crowd the front door.
   const spacingAnchors = property ? [property] : [];
+  // Fall back to the property candidate's own coordinates if no explicit location was passed.
+  const propertyPoint: LatLng | undefined = propertyLocation ?? property;
 
   // Group the (non-property) budget by approach so each direction is a followable mini-trail
   // instead of one route hogging every sign. Groups preserve the LLM/score priority order.
@@ -27,7 +34,11 @@ export function selectTopN(candidates: ScoredCandidate[], llmResult: LLMRankedRe
     groups.set(key, group);
   }
 
-  const selected = allocateAcrossApproaches(groups, spacingAnchors, targetCount);
+  // Reserve ~40% of the budget for the final block near the property (research Q5): without this,
+  // arterial/high-traffic candidates win on score and the door gets no coverage ("none in the
+  // neighborhood"). Phase 1 fills near-house slots first, phase 2 fills the rest.
+  const nearReserve = propertyPoint ? Math.min(targetCount, Math.max(2, Math.round(targetCount * 0.4))) : 0;
+  const selected = allocateAcrossApproaches(groups, spacingAnchors, targetCount, propertyPoint, nearReserve);
 
   if (property) {
     selected.push(property);
@@ -51,43 +62,60 @@ export function selectTopN(candidates: ScoredCandidate[], llmResult: LLMRankedRe
     }));
 }
 
-// Round-robin allocation: cycle through approaches, each round taking the highest-priority
-// remaining candidate from each that still satisfies hard spacing. This fairly distributes the
-// budget (research §0.5: aim for an even, followable trail per direction) — a route can only
-// "win" extra signs once the others are exhausted, so we never get a lonely 1-sign route while
-// another is overloaded. Stops when the budget is met or no approach can place another sign.
+// Round-robin allocation across approaches, in two phases:
+//   Phase 1 — fill the near-house reserve (only candidates within the final block) so the door
+//             always gets coverage (research Q5 / fixes the "none in the neighborhood" skew).
+//   Phase 2 — fill the remaining budget with the best-spaced candidates from any zone.
+// Within each phase, cycling through approaches keeps a route from hogging the budget; a route
+// only wins extra signs once the others are exhausted, so we avoid lonely 1-sign spurs.
 function allocateAcrossApproaches(
   groups: Map<number, ScoredCandidate[]>,
   spacingAnchors: ScoredCandidate[],
   targetCount: number,
+  propertyPoint: LatLng | undefined,
+  nearReserve: number,
 ): ScoredCandidate[] {
   const selected: ScoredCandidate[] = [];
   const approachKeys = [...groups.keys()];
+
+  const fits = (candidate: ScoredCandidate) =>
+    !selected.includes(candidate) &&
+    adjustedScore(candidate, [...selected, ...spacingAnchors]) > Number.NEGATIVE_INFINITY;
+  const isNearHouse = (candidate: ScoredCandidate) =>
+    Boolean(propertyPoint) && haversineDistanceFeet(candidate, propertyPoint!) <= FINAL_BLOCK_FT;
+
+  // Phase 1: near-house reserve (everything added here is near, so selected length == near count).
+  roundRobinFill(selected, approachKeys, groups, Math.min(nearReserve, targetCount), (c) => fits(c) && isNearHouse(c));
+  // Phase 2: fill the rest from any zone.
+  roundRobinFill(selected, approachKeys, groups, targetCount, fits);
+
+  return selected;
+}
+
+function roundRobinFill(
+  selected: ScoredCandidate[],
+  approachKeys: number[],
+  groups: Map<number, ScoredCandidate[]>,
+  limit: number,
+  eligible: (candidate: ScoredCandidate) => boolean,
+) {
   let madeProgress = true;
 
-  while (selected.length < targetCount && madeProgress) {
+  while (selected.length < limit && madeProgress) {
     madeProgress = false;
 
     for (const key of approachKeys) {
-      if (selected.length >= targetCount) {
+      if (selected.length >= limit) {
         break;
       }
 
-      const group = groups.get(key) ?? [];
-      const next = group.find(
-        (candidate) =>
-          !selected.includes(candidate) &&
-          adjustedScore(candidate, [...selected, ...spacingAnchors]) > Number.NEGATIVE_INFINITY,
-      );
-
+      const next = (groups.get(key) ?? []).find(eligible);
       if (next) {
         selected.push(next);
         madeProgress = true;
       }
     }
   }
-
-  return selected;
 }
 
 // Present signs grouped by approach and roughly in driving order (arterial entry → turns →

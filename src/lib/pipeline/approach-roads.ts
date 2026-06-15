@@ -1,5 +1,5 @@
 import { computeRoutes as computeGoogleRoute } from "@/lib/services/google-maps";
-import { maxApproachesForSignCount } from "@/lib/rules/placement";
+import { approachRadiusForSignCount, maxApproachesForSignCount } from "@/lib/rules/placement";
 import type { ApproachRoad, LatLng, RouteStep } from "@/lib/types";
 import { bearingDeltaDegrees, destinationPoint } from "@/lib/utils/geo";
 
@@ -11,13 +11,6 @@ const RAY_BEARINGS = [0, 45, 90, 135, 180, 225, 270, 315];
 const MIN_APPROACH_SEPARATION_DEG = 60;
 const HARD_APPROACH_SEPARATION_DEG = 30;
 const MAX_APPROACH_ROADS = 3;
-// Search 1 mile out — far enough to reliably reach a feeding arterial in suburban grids.
-// This is only the DISCOVERY distance; the trail itself is anchored to the arterial turn-off
-// (see arterialTurnOff), so a wide search does NOT push signs far from the house. We deliberately
-// keep this wide regardless of sign budget: shrinking it just produces shorter routes with fewer
-// decision points, which starves the trail. Budget-driven *placement* radius is a separate clamp
-// (planned for the per-property strategy/classifier layer), not a discovery shrink.
-const DISCOVERY_RADIUS_FT = 5_280;
 // Minimum speed for a step to count as a real arterial (vs. a residential street).
 const ARTERIAL_MPH = 30;
 
@@ -29,9 +22,13 @@ interface ApproachCandidate extends ApproachRoad {
 export async function findApproachRoads(origin: LatLng, signCount: number): Promise<ApproachRoad[]> {
   // Sign budget governs how many directions the trail can cover (min ~3 signs per direction).
   const maxApproaches = Math.min(MAX_APPROACH_ROADS, maxApproachesForSignCount(signCount));
+  // Sign budget also drives how far out we search (research §0.7): a tight budget stays close
+  // (~0.5 mi), a large budget reaches further (up to 1 mi). The trail is still anchored at the
+  // arterial turn-off, so this controls reach without pushing signs far from the house.
+  const discoveryRadiusFt = approachRadiusForSignCount(signCount);
   const attempts = await Promise.allSettled(
     RAY_BEARINGS.map(async (bearing) => {
-      const rayEnd = destinationPoint(origin, bearing, DISCOVERY_RADIUS_FT);
+      const rayEnd = destinationPoint(origin, bearing, discoveryRadiusFt);
       // Route in the real approach direction (incoming traffic → property) so we can
       // see which roads actually feed the property from this bearing.
       const route = await computeGoogleRoute(rayEnd, origin);

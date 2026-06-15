@@ -69,9 +69,21 @@ async function runAnalysis(input: AnalyzeInput) {
     llmResult = deterministicLLMResult(scoredCandidates);
   }
 
-  const placements = selectTopN(scoredCandidates, llmResult, signCount);
-  const primaryRoute = primaryRouteFor(routes);
-  const primaryTurns = (routes[0]?.decisionPoints ?? []).filter((point) => !point.isProperty).length;
+  const placements = selectTopN(scoredCandidates, llmResult, signCount, property);
+  // F2: only surface routes that actually received a directional sign. The optimizer concentrates
+  // the budget (research Q1), so a computed route can end up with zero signs — drawing its polyline
+  // would tell the agent to drive a road that has no signs on it. Keep the route↔sign mapping honest.
+  const usedApproachIndices = new Set(
+    placements
+      .filter((placement) => placement.placementType !== "property")
+      .map((placement) => placement.approachIndex ?? 0),
+  );
+  const usedRoutes = routes.filter((_, index) => usedApproachIndices.has(index));
+  // Guard: if nothing mapped to a route (e.g. only the house sign survived), keep the primary route
+  // so the map still has something to anchor on.
+  const reportedRoutes = usedRoutes.length > 0 ? usedRoutes : routes.slice(0, 1);
+  const primaryRoute = primaryRouteFor(reportedRoutes);
+  const primaryTurns = (reportedRoutes[0]?.decisionPoints ?? []).filter((point) => !point.isProperty).length;
   const result: SignPlacementResult = {
     id: nanoid(10),
     placements,
@@ -81,17 +93,17 @@ async function runAnalysis(input: AnalyzeInput) {
       duration: primaryRoute.duration,
       polyline: primaryRoute.polyline,
     },
-    routes: routes.map((route) => ({
+    routes: reportedRoutes.map((route) => ({
       approachRoad: route.approachRoad,
       distance: route.distance,
       duration: route.duration,
       polyline: route.polyline,
     })),
-    recommendedSignCount: recommendSignCount(primaryTurns, Math.max(0, routes.length - 1)),
+    recommendedSignCount: recommendSignCount(primaryTurns, Math.max(0, reportedRoutes.length - 1)),
     complianceWarnings: buildComplianceWarnings(geocoded.formattedAddress),
     disclaimer: LIABILITY_DISCLAIMER,
     fullReasoning: llmResult.overall_assessment,
-    degradationLevel: Math.max(degradationLevel, routes.some((route) => route.polylineFallbackActive) ? 2 : 0),
+    degradationLevel: Math.max(degradationLevel, reportedRoutes.some((route) => route.polylineFallbackActive) ? 2 : 0),
     costs: {
       maps: 0,
       llm: 0,
@@ -111,20 +123,24 @@ async function runAnalysis(input: AnalyzeInput) {
   });
 }
 
+// Degradation reflects how far short of the directions we *set out to open* we ended up — not the
+// absolute route count. Q1 concentration deliberately opens a single approach for small budgets, so
+// a clean 1-route plan is a success, not a degraded result. `routeFailureCount` is how many intended
+// approaches failed to route (approaches found − routes computed).
 function degradationForRoutes(routes: RouteData[], routeFailureCount: number) {
   if (routes.length === 0) {
-    return 5;
+    return 5; // nothing routed at all — total failure
   }
 
-  if (routes.length === 1) {
-    return 4;
+  if (routeFailureCount >= 2) {
+    return 4; // multiple intended approaches failed to route
   }
 
   if (routeFailureCount === 1) {
-    return 1;
+    return 1; // a single intended approach failed
   }
 
-  return 0;
+  return 0; // got every direction we intended to open
 }
 
 function deterministicLLMResult(candidates: ScoredCandidate[]): LLMRankedResult {

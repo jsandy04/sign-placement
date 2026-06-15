@@ -113,6 +113,7 @@ export interface ScoreBreakdown {
   visibilityQuality: number;
   approachSpeedAlignment: number;
   signSpacing: number;
+  proximityToProperty: number;
 }
 
 export interface ScoredCandidate extends FilteredCandidate {

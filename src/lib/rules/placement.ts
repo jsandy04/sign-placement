@@ -11,17 +11,30 @@ export const MAX_APPROACH_ROAD_DISTANCE_FT = 5_280;
 // and an agent realistically can't place more than ~15 signs before an open house).
 export const MIN_SIGNS = 5;
 export const MAX_SIGNS = 15;
-// Each approach direction needs enough signs (entry + turn + confirmation) to be followable.
+// Soft target for a followable direction (entry + turn + confirmation). Aim for this.
 export const MIN_SIGNS_PER_APPROACH = 3;
+// Hard floor for a SECONDARY direction: never open a 2nd/3rd route that can't carry at least
+// this many signs (research Q1 — a 1-sign spur is unfollowable and just wastes the budget).
+export const HARD_MIN_SIGNS_PER_APPROACH = 2;
+// "Final block" radius (~1/8 mi, one Phoenix grid block): the near-property saturation zone.
+export const FINAL_BLOCK_FT = 800;
 
 // Sign count drives radius: more signs can reach further out, fewer signs stay tight.
 export function approachRadiusForSignCount(signCount: number) {
   return Math.min(MAX_APPROACH_ROAD_DISTANCE_FT, APPROACH_ROAD_DISTANCE_FT + signCount * 200);
 }
 
-// How many approach directions a given sign budget can support without thinning the trail.
+// How many approach directions a budget should open. Research Q1 + practitioner consensus:
+// CONCENTRATE on one strong route rather than spreading thin. A small budget can't make a 2nd
+// direction followable, so keep it to one; only fan out as the budget grows.
 export function maxApproachesForSignCount(signCount: number) {
-  return Math.max(1, Math.floor(signCount / MIN_SIGNS_PER_APPROACH));
+  if (signCount < 8) {
+    return 1;
+  }
+  if (signCount < 12) {
+    return 2;
+  }
+  return 3;
 }
 
 // Suggested sign count: property + arterial signs + one per turn on the primary approach.
