@@ -39,6 +39,9 @@ yarn-error.log*
 /data/*
 !/data/.gitkeep
 
+# eval output
+/scripts/eval-results.json
+
 # vercel
 .vercel
 
