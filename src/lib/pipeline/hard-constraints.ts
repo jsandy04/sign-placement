@@ -35,6 +35,13 @@ function violatesOffset(candidate: CandidateLocation) {
     return false;
   }
 
+  // After-turn confirmation signs are intentionally placed ~50 ft PAST the turn (per research
+  // §2.3) — the lead-distance rule only governs BEFORE-turn advance signs, which need enough
+  // room for a driver to react. "at" candidates sit on the corner itself and are still dropped.
+  if (candidate.type === "after") {
+    return false;
+  }
+
   return candidate.distanceToTurn < recommendedOffsetFeet(candidate.speedEstimate);
 }
 

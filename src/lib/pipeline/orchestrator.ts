@@ -27,7 +27,11 @@ async function runAnalysis(input: AnalyzeInput) {
   const approaches = await findApproachRoads(property, signCount);
   const routes = await computeRoutes(property, approaches);
   const routeFailureCount = Math.max(0, approaches.length - routes.length);
-  const allDecisionPoints = routes.flatMap((route) => route.decisionPoints);
+  // Tag each decision point with the route it came from so the optimizer can allocate the
+  // sign budget fairly across approaches (otherwise one route can hog every sign).
+  const allDecisionPoints = routes.flatMap((route, routeIndex) =>
+    route.decisionPoints.map((point) => ({ ...point, approachIndex: routeIndex })),
+  );
   const fallbackDecisionPoints =
     allDecisionPoints.length > 0
       ? allDecisionPoints
@@ -40,6 +44,7 @@ async function runAnalysis(input: AnalyzeInput) {
             speedEstimate: 25,
             turnNumber: 1,
             isProperty: true,
+            approachIndex: 0,
           },
         ];
   const rawCandidates = generateCandidates(fallbackDecisionPoints);

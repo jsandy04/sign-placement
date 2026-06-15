@@ -13,7 +13,10 @@ const HARD_APPROACH_SEPARATION_DEG = 30;
 const MAX_APPROACH_ROADS = 3;
 // Search 1 mile out — far enough to reliably reach a feeding arterial in suburban grids.
 // This is only the DISCOVERY distance; the trail itself is anchored to the arterial turn-off
-// (see arterialTurnOff), so a large search radius does NOT push signs far from the house.
+// (see arterialTurnOff), so a wide search does NOT push signs far from the house. We deliberately
+// keep this wide regardless of sign budget: shrinking it just produces shorter routes with fewer
+// decision points, which starves the trail. Budget-driven *placement* radius is a separate clamp
+// (planned for the per-property strategy/classifier layer), not a discovery shrink.
 const DISCOVERY_RADIUS_FT = 5_280;
 // Minimum speed for a step to count as a real arterial (vs. a residential street).
 const ARTERIAL_MPH = 30;

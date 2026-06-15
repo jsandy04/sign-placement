@@ -61,6 +61,9 @@ export interface DecisionPoint extends LatLng {
   turnNumber: number;
   approachBearing?: number;
   isProperty?: boolean;
+  // Which approach route this point belongs to (index into the routes array). Used by the
+  // optimizer to allocate the sign budget fairly across directions.
+  approachIndex?: number;
 }
 
 export interface RouteData {
@@ -96,6 +99,7 @@ export interface CandidateLocation extends LatLng {
   recommendedOffset: number;
   speedEstimate: number;
   approachBearing?: number;
+  approachIndex?: number;
 }
 
 export interface FilteredCandidate extends CandidateLocation {
@@ -163,6 +167,7 @@ export interface SignPlacement extends LatLng {
   flag: ConstraintFlag;
   isSelected: boolean;
   approachBearing?: number;
+  approachIndex?: number;
 }
 
 export interface RouteSummary {

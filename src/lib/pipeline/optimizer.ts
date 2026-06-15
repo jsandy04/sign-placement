@@ -7,49 +7,106 @@ export function selectTopN(candidates: ScoredCandidate[], llmResult: LLMRankedRe
   const llmCandidates = llmResult.selected_signs
     .map((selection) => byId.get(selection.candidate_id))
     .filter((candidate): candidate is ScoredCandidate => Boolean(candidate));
+  // Priority order: LLM-preferred candidates first, then everything else in score order.
   const ordered = [...llmCandidates, ...candidates.filter((candidate) => !llmCandidates.includes(candidate))];
   const property = candidates.find((candidate) => candidate.type === "property");
   const targetCount = property ? Math.max(0, n - 1) : n;
-  const selected: ScoredCandidate[] = [];
-  // Treat the property as a fixed spacing anchor so approach signs don't crowd the front door
-  // (the final pre-turn sign was landing right on top of the property sign).
+  // Treat the property as a fixed spacing anchor so approach signs don't crowd the front door.
   const spacingAnchors = property ? [property] : [];
 
-  while (selected.length < targetCount) {
-    const next = ordered
-      .filter((candidate) => candidate.type !== "property")
-      .filter((candidate) => !selected.includes(candidate))
-      .map((candidate) => ({
-        candidate,
-        adjustedScore: adjustedScore(candidate, [...selected, ...spacingAnchors]),
-      }))
-      .filter(({ adjustedScore }) => adjustedScore > Number.NEGATIVE_INFINITY)
-      .sort((a, b) => b.adjustedScore - a.adjustedScore)[0]?.candidate;
-
-    if (!next) {
-      break;
+  // Group the (non-property) budget by approach so each direction is a followable mini-trail
+  // instead of one route hogging every sign. Groups preserve the LLM/score priority order.
+  const groups = new Map<number, ScoredCandidate[]>();
+  for (const candidate of ordered) {
+    if (candidate.type === "property") {
+      continue;
     }
-
-    selected.push(next);
+    const key = candidate.approachIndex ?? 0;
+    const group = groups.get(key) ?? [];
+    group.push(candidate);
+    groups.set(key, group);
   }
+
+  const selected = allocateAcrossApproaches(groups, spacingAnchors, targetCount);
 
   if (property) {
     selected.push(property);
   }
 
-  return selected.slice(0, n).map((candidate, index) => ({
-    id: candidate.id,
-    sortOrder: index + 1,
-    lat: candidate.lat,
-    lng: candidate.lng,
-    description: descriptionFor(candidate),
-    reasoning: reasoningFor(candidate, llmResult),
-    score: candidate.score,
-    placementType: candidate.placementType,
-    flag: candidate.flag,
-    isSelected: true,
-    approachBearing: candidate.approachBearing,
-  }));
+  return orderForTrail(selected, property)
+    .slice(0, n)
+    .map((candidate, index) => ({
+      id: candidate.id,
+      sortOrder: index + 1,
+      lat: candidate.lat,
+      lng: candidate.lng,
+      description: descriptionFor(candidate),
+      reasoning: reasoningFor(candidate, llmResult),
+      score: candidate.score,
+      placementType: candidate.placementType,
+      flag: candidate.flag,
+      isSelected: true,
+      approachBearing: candidate.approachBearing,
+      approachIndex: candidate.approachIndex,
+    }));
+}
+
+// Round-robin allocation: cycle through approaches, each round taking the highest-priority
+// remaining candidate from each that still satisfies hard spacing. This fairly distributes the
+// budget (research §0.5: aim for an even, followable trail per direction) — a route can only
+// "win" extra signs once the others are exhausted, so we never get a lonely 1-sign route while
+// another is overloaded. Stops when the budget is met or no approach can place another sign.
+function allocateAcrossApproaches(
+  groups: Map<number, ScoredCandidate[]>,
+  spacingAnchors: ScoredCandidate[],
+  targetCount: number,
+): ScoredCandidate[] {
+  const selected: ScoredCandidate[] = [];
+  const approachKeys = [...groups.keys()];
+  let madeProgress = true;
+
+  while (selected.length < targetCount && madeProgress) {
+    madeProgress = false;
+
+    for (const key of approachKeys) {
+      if (selected.length >= targetCount) {
+        break;
+      }
+
+      const group = groups.get(key) ?? [];
+      const next = group.find(
+        (candidate) =>
+          !selected.includes(candidate) &&
+          adjustedScore(candidate, [...selected, ...spacingAnchors]) > Number.NEGATIVE_INFINITY,
+      );
+
+      if (next) {
+        selected.push(next);
+        madeProgress = true;
+      }
+    }
+  }
+
+  return selected;
+}
+
+// Present signs grouped by approach and roughly in driving order (arterial entry → turns →
+// near the property) so the agent's list reads like a route, not a scattered score ranking.
+// The mandatory property sign always sorts last.
+function orderForTrail(selected: ScoredCandidate[], property?: ScoredCandidate): ScoredCandidate[] {
+  return [...selected].sort((a, b) => {
+    if (property && a.id === property.id) {
+      return 1;
+    }
+    if (property && b.id === property.id) {
+      return -1;
+    }
+    const approachDelta = (a.approachIndex ?? 0) - (b.approachIndex ?? 0);
+    if (approachDelta !== 0) {
+      return approachDelta;
+    }
+    return a.turnNumber - b.turnNumber;
+  });
 }
 
 function adjustedScore(candidate: ScoredCandidate, selected: ScoredCandidate[]) {

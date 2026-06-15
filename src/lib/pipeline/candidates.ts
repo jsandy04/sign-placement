@@ -43,6 +43,7 @@ function toCandidate(
     recommendedOffset: recommendedOffsetFeet(point.speedEstimate),
     speedEstimate: point.speedEstimate,
     approachBearing: point.approachBearing,
+    approachIndex: point.approachIndex,
   };
 }
 

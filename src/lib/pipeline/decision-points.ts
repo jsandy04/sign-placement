@@ -16,10 +16,12 @@ const DECISION_MANEUVERS = new Set<ManeuverType>([
   "name-change",
 ]);
 
-// Drop a "keep straight" confirmation sign roughly every quarter mile of road so long legs
-// between turns still get coverage. Without these, a route only yields ~1 selectable sign per
-// turn, so short/turn-sparse routes can't reach the agent's requested sign count.
-const CONFIRMATION_SPACING_FT = 1_320;
+// Drop a "keep straight" confirmation sign roughly every block (~1/8 mi) of road so legs
+// between turns get real coverage. Without these, a route only yields ~1 selectable sign per
+// turn, so short/turn-sparse routes can't reach the agent's requested sign count. 660 ft sits
+// just outside the 500 ft soft-spacing penalty, so candidates fill the trail without crowding;
+// the optimizer's spacing rules still thin them out if the budget is small.
+const CONFIRMATION_SPACING_FT = 660;
 // Don't place a confirmation sign right next to an actual turn or the property.
 const CONFIRMATION_MIN_GAP_FT = 300;
 
