@@ -226,11 +226,19 @@ function adjustedScore(candidate: ScoredCandidate, selected: ScoredCandidate[]) 
   return score;
 }
 
+// §2.5: the realtor-standard physical placement for every directional sign — right side (passenger
+// side, most visible) angled toward the traffic that's approaching it.
+const PLACEMENT_SUFFIX = "Right side of the road, angled ~45° toward oncoming traffic.";
+
 function descriptionFor(candidate: ScoredCandidate) {
   if (candidate.type === "property") {
     return "Mandatory — final sign at the property address.";
   }
 
+  return `${coreDescription(candidate)} ${PLACEMENT_SUFFIX}`;
+}
+
+function coreDescription(candidate: ScoredCandidate) {
   // The arterial entry sign (turnNumber 0): the first, highest-visibility sign where buyers leave
   // the main road toward the property.
   if (candidate.turnNumber === 0) {

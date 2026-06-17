@@ -15,11 +15,19 @@ export function generateCandidates(points: DecisionPoint[]): CandidateLocation[]
     const before = destinationPoint(point, oppositeBearing(point.approachBearing ?? 0), offset);
     const after = destinationPoint(point, point.approachBearing ?? 0, AFTER_TURN_CONFIRMATION_FT);
 
-    return [
+    const candidates = [
       toCandidate({ ...point, ...before }, "before", placementTypeFor(point), offset, index),
-      toCandidate(point, "at", placementTypeFor(point), 0, index),
       toCandidate({ ...point, ...after }, "after", placementTypeFor(point), AFTER_TURN_CONFIRMATION_FT, index),
     ];
+
+    // §2.4: NEVER place a sign exactly at an intersection corner (sight-triangle hazard, illegal in
+    // most jurisdictions). The "at" spot is only acceptable on a straightaway (entry / confirmation
+    // points), never on a real turn — there we keep only "before" (lead) and "after" (confirmation).
+    if (point.maneuverType === "straight") {
+      candidates.push(toCandidate(point, "at", placementTypeFor(point), 0, index));
+    }
+
+    return candidates;
   });
 }
 
