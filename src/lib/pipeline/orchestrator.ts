@@ -56,7 +56,9 @@ async function runAnalysis(input: AnalyzeInput) {
         ];
   const rawCandidates = generateCandidates(fallbackDecisionPoints);
   const filteredCandidates = applyHardConstraints(rawCandidates);
-  const scoredCandidates = scoreCandidates(filteredCandidates);
+  // Pass the property so the proximity factor (research Q5) actually fires — without it
+  // proximityScore returns a constant 50 and the near-house weighting is dead.
+  const scoredCandidates = scoreCandidates(filteredCandidates, property);
   const routeContext = {
     address: input.address,
     formattedAddress: geocoded.formattedAddress,
