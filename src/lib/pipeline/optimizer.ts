@@ -231,6 +231,13 @@ function descriptionFor(candidate: ScoredCandidate) {
     return "Mandatory — final sign at the property address.";
   }
 
+  // The arterial entry sign (turnNumber 0): the first, highest-visibility sign where buyers leave
+  // the main road toward the property.
+  if (candidate.turnNumber === 0) {
+    const road = candidate.roadName && candidate.roadName !== "the main road" ? ` off ${candidate.roadName}` : " off the main road";
+    return `First sign — at the turn${road} toward the property (highest-visibility spot).`;
+  }
+
   // "straight" candidates are reassurance signs on a long stretch between turns, not a turn.
   if (candidate.maneuverType === "straight") {
     const road = candidate.roadName && candidate.roadName !== "along the route" ? ` on ${candidate.roadName}` : "";

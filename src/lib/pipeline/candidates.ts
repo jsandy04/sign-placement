@@ -52,7 +52,8 @@ function placementTypeFor(point: DecisionPoint): PlacementType {
     return "roundabout";
   }
 
-  if (point.turnNumber === 1) {
+  // turnNumber 0 = the arterial entry sign; 1 = the first inner turn. Both are "entrance" spots.
+  if (point.turnNumber <= 1) {
     return "entrance";
   }
 

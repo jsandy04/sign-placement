@@ -14,11 +14,13 @@ export const MAX_APPROACH_ROAD_DISTANCE_FT = 5_280;
 export const MIN_SIGNS = 5;
 export const MAX_SIGNS = 20;
 
-// Per-approach followability is TURN-DRIVEN, not a fixed number (new-tmfa.md Q2): a driver needs an
-// entry sign + one sign per turn + a confirmation near the property. So a 0-turn approach (property
-// on the arterial) needs 2, a 1-turn approach needs 3, an N-turn approach needs N+2.
-export const BASE_SIGNS_PER_APPROACH = 2; // entry + property confirmation
-export const SIGNS_PER_TURN = 1;
+// Per-direction sign counts (domain-rules-answers.md §0.6). A direction OPENS at a flat minimum —
+// entry/arterial sign + one key turn + confirmation = 3, or 2 for a turn-free approach (property
+// right on the arterial). Flat (not "2 + every turn"): that's what lets 8–10 signs cover 2–3
+// directions, the documented realtor standard, instead of pouring everything into one. Extra budget
+// DEEPENS a direction (signs its remaining turns); it does not raise the cost to open another.
+export const BASE_SIGNS_PER_APPROACH = 2; // entry + property confirmation (turn-free direction)
+export const MIN_SIGNS_PER_APPROACH = 3; // entry + key turn + confirmation (any direction with turns)
 // Near-property "final block" saturation: the shared last mile every approach funnels into. The
 // property sign counts as one of these (new-tmfa.md Q5).
 export const NEAR_HOUSE_TARGET = 3; // soft target incl. the property sign
@@ -26,10 +28,10 @@ export const NEAR_HOUSE_MIN = 2; // hard floor incl. the property sign
 // "Final block" radius (~1/8 mi, one Phoenix grid block): the near-property saturation zone.
 export const FINAL_BLOCK_FT = 800;
 
-// Hard minimum signs to make an approach with `turnCount` turns followable (entry + per-turn +
-// confirmation). Below this an approach is an unfollowable spur, so the budget can't open it.
+// Minimum signs to OPEN a direction — flat (see above). Counting every turn here overcharged each
+// direction and starved coverage — the exact failure that produced "7 signs crammed on one route."
 export function hardMinSignsForApproach(turnCount: number) {
-  return BASE_SIGNS_PER_APPROACH + SIGNS_PER_TURN * Math.max(0, turnCount);
+  return turnCount <= 0 ? BASE_SIGNS_PER_APPROACH : MIN_SIGNS_PER_APPROACH;
 }
 
 // Sign count drives radius: more signs can reach further out, fewer signs stay tight.

@@ -57,6 +57,15 @@ export function extractDecisionPoints(route: RouteData): DecisionPoint[] {
     .map((step, index) => toDecisionPoint(step, index + 1, cumulativeDistance(route.steps, index)))
     .filter((point): point is NonNullable<ReturnType<typeof toDecisionPoint>> => Boolean(point));
 
+  // Entry sign at the arterial turn-off — the route's start, where buyers leave the main road toward
+  // the property. This is the single highest-visibility sign (domain-rules-answers.md §3.4) and the
+  // anchor that makes the trail REACH OUT to the arterial instead of clustering at the inner turns
+  // near the house. turnNumber 0 marks it as the entry (sorts first, one-per-turn-safe).
+  const entry = entryPoint(route);
+  if (entry) {
+    points.unshift(entry);
+  }
+
   if (route.steps.length < 5) {
     points.push(...extractPolylineFallbackPoints(route, points.length + 1));
   }
@@ -87,6 +96,32 @@ export function extractDecisionPoints(route: RouteData): DecisionPoint[] {
   }
 
   return points;
+}
+
+// Build the entry sign at the route start (the arterial turn-off). Skips when the route is too
+// short to have a meaningful "out there" entry distinct from the near-house block, or when an actual
+// turn already sits at the very start (it would double up).
+function entryPoint(route: RouteData): DecisionPoint | undefined {
+  const start = route.polylinePoints[0];
+  const firstStep = route.steps[0];
+  const property = route.steps.at(-1)?.end;
+  if (!start || !firstStep || !property) {
+    return undefined;
+  }
+  // Nothing to reach out to if the whole route sits inside the final block.
+  if (haversineDistanceFeet(start, property) < CONFIRMATION_MIN_GAP_FT) {
+    return undefined;
+  }
+
+  return {
+    ...start,
+    maneuverType: "straight",
+    roadName: firstStep.roadName ?? "the main road",
+    distanceFromPrior: 0,
+    speedEstimate: estimateSpeedMph(firstStep),
+    turnNumber: 0,
+    approachBearing: bearingDegrees(firstStep.start, firstStep.end),
+  };
 }
 
 function toDecisionPoint(step: RouteStep, turnNumber: number, distanceFromPrior: number) {
