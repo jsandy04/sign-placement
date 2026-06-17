@@ -7,8 +7,10 @@ export const APPROACH_ROAD_DISTANCE_FT = 2_640;
 // Absolute max radius (1 mi) for unusually isolated/rural properties or large sign budgets.
 export const MAX_APPROACH_ROAD_DISTANCE_FT = 5_280;
 
-// Sign-count guardrails (realtor time budget: a trail needs a floor to be followable; the ceiling
-// allows big-grid neighborhoods that genuinely need 4 approaches — see new-tmfa.md Q4).
+// Sign-count guardrails. Tuned for the 5–20 band, where the tool's value is highest: most realtors
+// run ≤15 signs and want to maximize visibility with what they have. The ceiling can be lifted later
+// for "power" realtors (15–30+ signs / assistants doing the placement) once the tool proves out —
+// the allocation logic is count-agnostic, so raising MAX_SIGNS is all it takes.
 export const MIN_SIGNS = 5;
 export const MAX_SIGNS = 20;
 

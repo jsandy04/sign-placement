@@ -17,6 +17,28 @@ const DECISION_MANEUVERS = new Set<ManeuverType>([
   "name-change",
 ]);
 
+// A SIGNABLE decision is a genuine fork-in-the-road where a driver could go the WRONG way and so
+// needs a sign (new-tmfa.md Q2: "a sign at every turn where a driver could make a wrong decision" —
+// NOT every maneuver). Slight/gentle bends, merges, and name-changes carry the driver through
+// without a decision, so they don't need a sign. Counting every maneuver overcharges each route's
+// followable minimum and starves multi-route coverage — this is what we size the budget against.
+const SIGNABLE_DECISIONS = new Set<ManeuverType>([
+  "turn-left",
+  "turn-right",
+  "turn-sharp-left",
+  "turn-sharp-right",
+  "roundabout-left",
+  "roundabout-right",
+  "fork-left",
+  "fork-right",
+]);
+
+// How many signs a route REQUIRES to stay followable = signable decisions on it (the optimizer adds
+// the entry + property-confirmation on top). Excludes the property point and obvious/forced moves.
+export function countSignableDecisions(decisionPoints: DecisionPoint[]): number {
+  return decisionPoints.filter((point) => !point.isProperty && SIGNABLE_DECISIONS.has(point.maneuverType)).length;
+}
+
 // Drop a "keep straight" confirmation sign roughly every block (~1/8 mi) of road so legs
 // between turns get real coverage. Without these, a route only yields ~1 selectable sign per
 // turn, so short/turn-sparse routes can't reach the agent's requested sign count. 660 ft sits

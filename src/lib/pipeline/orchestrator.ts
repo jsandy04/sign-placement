@@ -8,6 +8,7 @@ import { geocode } from "./geocoder";
 import { applyHardConstraints } from "./hard-constraints";
 import { llmEvaluate } from "./llm";
 import { selectTopN } from "./optimizer";
+import { countSignableDecisions } from "./decision-points";
 import { computeRoutes } from "./routing";
 import { scoreCandidates } from "./scorer";
 import type {
@@ -78,16 +79,14 @@ async function runAnalysis(input: AnalyzeInput) {
     llmResult = deterministicLLMResult(scoredCandidates);
   }
 
-  // Turns per approach (route index → turn count) so the optimizer can size each route's
-  // followable minimum (entry + per-turn + confirmation). Confirmation/advance signs ("straight")
-  // and the property point don't count as turns.
-  const approachTurnCounts = new Map<number, number>(
-    routes.map((route, routeIndex) => [
-      routeIndex,
-      route.decisionPoints.filter((point) => !point.isProperty && point.maneuverType !== "straight").length,
-    ]),
+  // Signable decisions per approach (route index → count) so the optimizer can size each route's
+  // followable minimum (entry + one sign per genuine wrong-turn decision + confirmation). Counting
+  // only signable decisions — not every maneuver — keeps routes affordable so the budget can cover
+  // more directions (coverage-first) while each funded route stays followable.
+  const approachDecisionCounts = new Map<number, number>(
+    routes.map((route, routeIndex) => [routeIndex, countSignableDecisions(route.decisionPoints)]),
   );
-  const placements = selectTopN(scoredCandidates, llmResult, signCount, property, approachTurnCounts);
+  const placements = selectTopN(scoredCandidates, llmResult, signCount, property, approachDecisionCounts);
   const usedApproachIndices = new Set(
     placements
       .filter((placement) => placement.placementType !== "property")
@@ -108,7 +107,7 @@ async function runAnalysis(input: AnalyzeInput) {
         duration: route.duration,
         polyline: route.polyline,
         status: funded ? ("funded" as const) : ("available" as const),
-        signsToUnlock: funded ? undefined : hardMinSignsForApproach(approachTurnCounts.get(index) ?? 0),
+        signsToUnlock: funded ? undefined : hardMinSignsForApproach(approachDecisionCounts.get(index) ?? 0),
       };
     })
     // Funded (solid) routes lead so the map's primary styling lands on a route that has signs.
@@ -120,7 +119,7 @@ async function runAnalysis(input: AnalyzeInput) {
   // the unfunded approaches.
   const signsToCoverAllApproaches = Math.min(
     MAX_SIGNS,
-    routes.reduce((sum, _route, index) => sum + hardMinSignsForApproach(approachTurnCounts.get(index) ?? 0), 0) +
+    routes.reduce((sum, _route, index) => sum + hardMinSignsForApproach(approachDecisionCounts.get(index) ?? 0), 0) +
       NEAR_HOUSE_TARGET,
   );
   const result: SignPlacementResult = {
