@@ -117,7 +117,10 @@ export async function computeRoutes(origin: LatLng, destination: LatLng): Promis
           origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
           destination: { location: { latLng: { latitude: destination.lat, longitude: destination.lng } } },
           travelMode: "DRIVE",
-          routingPreference: "TRAFFIC_AWARE",
+          // Traffic-UNAWARE on purpose: sign placement wants the stable geographic approach roads,
+          // not whatever is fastest in this minute's congestion. This makes results repeatable
+          // (fixes "it constantly changes") and gives free-flow speed, a cleaner road-class signal.
+          routingPreference: "TRAFFIC_UNAWARE",
           polylineQuality: "HIGH_QUALITY",
           polylineEncoding: "ENCODED_POLYLINE",
         }),

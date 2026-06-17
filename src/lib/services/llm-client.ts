@@ -8,7 +8,9 @@ import type { LLMEvaluationResult, LLMRankedResult, RouteContext, ScoredCandidat
 // failures, so quality degrades gracefully.
 const MODEL = "claude-haiku-4-5";
 const MAX_TOKENS = 2_000;
-const TEMPERATURE = 0.2;
+// Temperature 0 for repeatability: the same property should rank the same way every run. Combined
+// with traffic-unaware routing, this kills the "it constantly changes" wobble.
+const TEMPERATURE = 0;
 const LLM_ATTEMPTS = 3;
 
 export const SIGN_PLACEMENT_SYSTEM_PROMPT = `You are an expert real estate sign placement strategist. Signs form a directional trail from the nearest major road to the property. You will receive pre-scored candidate sign locations for each turn along the route.

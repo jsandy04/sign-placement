@@ -89,8 +89,17 @@ function allocateAcrossApproaches(
   // Sort keys ascending so the busiest arterial (approachIndex 0) is funded first.
   const approachKeys = [...groups.keys()].sort((a, b) => a - b);
 
+  // One sign per decision point: every turn yields before/at/after candidates (~150 ft apart) that
+  // share an (approachIndex, turnNumber). Placing two of them is the "7 signs crammed at 300 ft"
+  // failure. The research is explicit — one sign per turn — so reject a candidate whose turn already
+  // has a sign on its approach.
+  const turnTaken = (candidate: ScoredCandidate) =>
+    selected.some(
+      (chosen) => chosen.approachIndex === candidate.approachIndex && chosen.turnNumber === candidate.turnNumber,
+    );
   const fits = (candidate: ScoredCandidate) =>
     !selected.includes(candidate) &&
+    !turnTaken(candidate) &&
     adjustedScore(candidate, [...selected, ...spacingAnchors]) > Number.NEGATIVE_INFINITY;
   const isNearHouse = (candidate: ScoredCandidate) =>
     Boolean(propertyPoint) && haversineDistanceFeet(candidate, propertyPoint!) <= FINAL_BLOCK_FT;
