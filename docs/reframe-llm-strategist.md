@@ -60,9 +60,12 @@ Repeatability (cache the analysis per address) carries through both LLM stages.
 ## Guardrails (so we don't reopen old wounds)
 
 - LLM never emits coordinates — only selects/judges; math computes positions.
-- Model is `claude-opus-4-8` with adaptive thinking + `effort: high` (→ `xhigh`/`max` for the hardest
-  judgment) — accuracy over speed. Opus 4.8 rejects `temperature` (400s), so the old `temperature: 0`
-  determinism is gone; **repeatability rests on caching the analysis per address** instead.
+- Model is env-configurable via `SIGN_PLACEMENT_MODEL`, defaulting to the **cheapest capable
+  multimodal** model (`claude-haiku-4-5`) — both stages must read Street View images, so a vision
+  model is required. Bump to `claude-sonnet-4-6` / `claude-opus-4-8` for sharper judgment.
+  `effort`/adaptive-thinking attach only on models that support them. Per-analysis cost is dominated
+  by Maps (~$0.12: 8 discovery rays + Street View stills) — the real floor regardless of model.
+  Opus rejects `temperature`, so **repeatability rests on caching the analysis per address.**
 - Cost: vision adds image-token cost per analysis; must fit the build-spec budget model
   (~<$0.10/analysis target, $10/day cap). Measure before scaling.
 

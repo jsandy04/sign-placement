@@ -6,13 +6,24 @@ import type { StreetViewImage } from "./google-maps";
 // The LLM is the strategist now — it judges which approaches matter, the per-property strategy, and
 // which corners to sign (Stage A), and reads Street View to judge each corner (Stage B). Geometry is
 // deterministic and lives elsewhere. See docs/reframe-llm-strategist.md.
-const MODEL = "claude-opus-4-8";
-const MAX_TOKENS = 16_000;
-// Accuracy over speed (user preference). "high" is the recommended floor for intelligence-sensitive
-// work; raise to "xhigh"/"max" in tuning if judgment quality needs it. Opus 4.8 rejects `temperature`,
-// so there is no temperature here — repeatability comes from caching the analysis per address.
-const EFFORT = "high" as const;
+// Model is env-configurable so cost vs. judgment quality is a knob, not a redeploy. Default to the
+// cheapest capable multimodal model — both stages must READ Street View images, so a vision model is
+// required (this rules out cheap text-only models like DeepSeek). Bump to claude-sonnet-4-6 or
+// claude-opus-4-8 via SIGN_PLACEMENT_MODEL when a property needs sharper judgment. Note the ~$0.12
+// Maps cost per analysis (8 discovery rays + Street View stills) is the real floor regardless of model.
+const MODEL = process.env.SIGN_PLACEMENT_MODEL ?? "claude-haiku-4-5";
+const MAX_TOKENS = 8_000;
 const ATTEMPTS = 3;
+
+// Adaptive thinking + the effort knob exist only on Opus 4.6+/Sonnet 4.6/Fable 5 — Haiku 4.5 rejects
+// them (400). Attach them only when the chosen model supports them, so the cheap default still works.
+// (Opus 4.8 also rejects `temperature`, so repeatability comes from caching the analysis per address.)
+const SUPPORTS_EFFORT = /opus-4-[678]|sonnet-4-6|fable-5/.test(MODEL);
+function reasoningParams() {
+  return SUPPORTS_EFFORT
+    ? { thinking: { type: "adaptive" as const }, output_config: { effort: "high" as const } }
+    : {};
+}
 
 // === Stage A: which approaches matter + which corners get a sign ===
 
@@ -82,9 +93,8 @@ export async function runStrategist(briefing: StrategistBriefing): Promise<Strat
       const message = await client.messages.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        thinking: { type: "adaptive" },
-        output_config: { effort: EFFORT },
-        system: STRATEGIST_SYSTEM_PROMPT,
+        ...reasoningParams(),
+        system:STRATEGIST_SYSTEM_PROMPT,
         tools: [strategyTool],
         tool_choice: { type: "tool", name: strategyTool.name },
         messages: [
@@ -214,9 +224,8 @@ export async function judgeCorners(corners: CornerInput[]): Promise<CornerVerdic
       const message = await client.messages.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        thinking: { type: "adaptive" },
-        output_config: { effort: EFFORT },
-        system: VISION_SYSTEM_PROMPT,
+        ...reasoningParams(),
+        system:VISION_SYSTEM_PROMPT,
         tools: [cornerTool],
         tool_choice: { type: "tool", name: cornerTool.name },
         messages: [{ role: "user", content }],
