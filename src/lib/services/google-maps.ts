@@ -3,6 +3,8 @@ import { decodePolyline } from "@/lib/utils/geo";
 
 const GEOCODING_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
+const STREETVIEW_URL = "https://maps.googleapis.com/maps/api/streetview";
+const STREETVIEW_METADATA_URL = "https://maps.googleapis.com/maps/api/streetview/metadata";
 const MAPS_RETRY_ATTEMPTS = 3;
 const MAPS_RETRY_BASE_MS = 1_000;
 const MAPS_RETRY_MAX_MS = 16_000;
@@ -147,6 +149,68 @@ export async function computeRoutes(origin: LatLng, destination: LatLng): Promis
     steps,
     polylinePoints: polyline ? decodePolyline(polyline) : steps.flatMap((step) => [step.start, step.end]),
   };
+}
+
+export interface StreetViewImage {
+  data: string; // base64-encoded JPEG, ready for a Claude vision content block
+  mediaType: "image/jpeg";
+  heading: number;
+}
+
+// Free metadata probe — confirms Street View coverage near a point WITHOUT billing an image.
+// The Static API otherwise returns a gray "no imagery" placeholder at HTTP 200, which we must never
+// hand to the model as if it were the corner.
+export async function streetViewAvailable(location: LatLng): Promise<boolean> {
+  const key = getGoogleMapsApiKey();
+  const params = new URLSearchParams({
+    location: `${location.lat},${location.lng}`,
+    source: "outdoor",
+    key,
+  });
+
+  try {
+    const response = await fetch(`${STREETVIEW_METADATA_URL}?${params.toString()}`);
+    const data = (await response.json()) as { status?: string };
+    return data.status === "OK";
+  } catch {
+    return false;
+  }
+}
+
+// Fetch the Street View still at a point, aimed along `heading` (the driver's approach bearing) so the
+// model sees the corner the way a driver arriving at it would. Returns a base64 JPEG for a Claude
+// vision block, or null when there's no coverage. We probe metadata first so we never pay for — or
+// reason over — a placeholder image. fov 90 ≈ a natural windshield view.
+export async function fetchStreetViewImage(
+  location: LatLng,
+  heading: number,
+  options: { size?: string; fov?: number; pitch?: number } = {},
+): Promise<StreetViewImage | null> {
+  if (!(await streetViewAvailable(location))) {
+    return null;
+  }
+
+  const key = getGoogleMapsApiKey();
+  const normalizedHeading = Math.round(((heading % 360) + 360) % 360);
+  const params = new URLSearchParams({
+    size: options.size ?? "640x640",
+    location: `${location.lat},${location.lng}`,
+    heading: String(normalizedHeading),
+    fov: String(options.fov ?? 90),
+    pitch: String(options.pitch ?? 0),
+    source: "outdoor",
+    key,
+  });
+
+  const response = await retry(
+    () => fetch(`${STREETVIEW_URL}?${params.toString()}`),
+    MAPS_RETRY_ATTEMPTS,
+    MAPS_RETRY_BASE_MS,
+    MAPS_RETRY_MAX_MS,
+  );
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return { data: buffer.toString("base64"), mediaType: "image/jpeg", heading: normalizedHeading };
 }
 
 function toLatLng(apiLatLng: ApiLatLng | undefined): LatLng {
