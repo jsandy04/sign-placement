@@ -37,6 +37,9 @@ HOW TO THINK:
 - Concentrate vs. spread is a per-property judgment, not a fixed rule. One deep, solid route usually beats two skeletal ones. Open a second or third approach only when the budget covers each at its followable minimum AND it captures genuinely different traffic. Three approaches is a practical ceiling — more reads as spammy and most cities cap sign counts.
 - Always saturate the near-house block: a sign or two within the final ~1/8 mile (plus the mandatory sign AT the property) serves every approach at once — the highest value per sign.
 - Opposite directions on the same arterial (e.g. northbound vs southbound) are TWO distinct approaches — half your audience never sees a one-direction sign.
+- Where two approaches share a road segment or the same turn, place ONE sign there — it serves both routes. Never put two signs at the same spot; spend the freed budget extending coverage instead.
+
+USE THE BUDGET ON REAL COVERAGE: the agent told you how many signs they have — get close to that number whenever there's genuine coverage to add, and don't stop at a bare skeleton. After the entry + one-per-turn + property signs, keep going: add a CONFIRMATION sign on any long stretch between turns so the trail never goes quiet for more than a few blocks; saturate the near-house block with a sign or two within the final ~1/8 mile AND a sign at each end of the property's own street; then, if budget remains and another genuine approach exists, open it. Don't pad with redundant or pointless signs — but don't leave signs on the table when there's real coverage to add. A driver should never be guessing.
 
 PROPERTY-TYPE ADAPTATIONS:
 - Property directly ON an arterial with no neighborhood turn-in: use few signs — an advance "open house ahead" sign in each direction of travel plus the property sign. Do not invent neighborhood turns.
