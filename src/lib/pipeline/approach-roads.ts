@@ -1,5 +1,5 @@
 import { computeRoutes as computeGoogleRoute } from "@/lib/services/google-maps";
-import { approachRadiusForSignCount, maxApproachesForSignCount } from "@/lib/rules/placement";
+import { approachRadiusForSignCount } from "@/lib/rules/placement";
 import type { ApproachRoad, LatLng, RouteStep } from "@/lib/types";
 import { bearingDeltaDegrees, destinationPoint, haversineDistanceFeet } from "@/lib/utils/geo";
 
@@ -10,7 +10,7 @@ const RAY_BEARINGS = [0, 45, 90, 135, 180, 225, 270, 315];
 // relaxed to a 30° floor when backfilling so we never sacrifice a busy arterial for spread.
 const MIN_APPROACH_SEPARATION_DEG = 60;
 const HARD_APPROACH_SEPARATION_DEG = 30;
-const MAX_APPROACH_ROADS = 4;
+const MAX_APPROACH_ROADS = 5;
 // Same-road dedup is bearing-aware (new-tmfa.md Q1): NB and SB traffic on the same arterial are two
 // distinct approaches ("half the audience never sees the sign" with one-direction coverage). Only
 // merge two same-named approaches when they come from roughly the SAME direction (within 40°); when
@@ -31,11 +31,11 @@ interface ApproachCandidate extends ApproachRoad {
 }
 
 export async function findApproachRoads(origin: LatLng, signCount: number): Promise<ApproachRoad[]> {
-  // Discover MORE approaches than the budget can fund (always aim for ~3) so the pipeline can
-  // SURFACE the unfunded ones to the agent — faded, with a "needs +N signs" hint — instead of
-  // hiding them (design-thesis "surface, don't mandate"). The optimizer still funds only the routes
-  // the budget can make followable.
-  const maxApproaches = Math.min(MAX_APPROACH_ROADS, Math.max(3, maxApproachesForSignCount(signCount)));
+  // Surface MORE approaches than the budget can fund so the LLM strategist has real options to judge
+  // — including the third/fourth way in a realtor would think of (e.g. out to a different arterial).
+  // Discovery is geometry; the strategist decides which of these actually matter, and the UI shows
+  // the rest as "available — needs +N signs" (design-thesis "surface, don't mandate").
+  const maxApproaches = MAX_APPROACH_ROADS;
   // Sign budget also drives how far out we search (research §0.7): a tight budget stays close
   // (~0.5 mi), a large budget reaches further (up to 1 mi). The trail is still anchored at the
   // arterial turn-off, so this controls reach without pushing signs far from the house.
