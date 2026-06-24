@@ -110,7 +110,7 @@ async function runAnalysis(input: AnalyzeInput): Promise<SignPlacementResult> {
   const placements = decision.signs
     .map((sign) => placeSign(sign, pointById, property))
     .filter((placement): placement is PlacedSign => placement !== null);
-  const ordered = orderForTrail(placements);
+  const ordered = dedupeColocated(orderForTrail(placements));
 
   // Stage B — read each corner's Street View and fold the verdict back in.
   const verdicts = await visionPass(ordered);
@@ -209,6 +209,26 @@ function orderForTrail(placements: PlacedSign[]): PlacedSign[] {
     if (approachDelta !== 0) return approachDelta;
     return a.sign.order - b.sign.order;
   });
+}
+
+// Two signs at the same spot is the "double-signed turn" bug — and it's also where the real value is:
+// when approaches overlap, ONE sign on the shared segment serves both routes. Drop any sign that lands
+// within DEDUP_FT of one we already kept (trail order = priority). The mandatory property sign always
+// stays.
+const DEDUP_FT = 100;
+function dedupeColocated(placements: PlacedSign[]): PlacedSign[] {
+  const kept: PlacedSign[] = [];
+  for (const placed of placements) {
+    if (placed.sign.role === "property") {
+      kept.push(placed);
+      continue;
+    }
+    const collides = kept.some((other) => other.id === placed.id || haversineDistanceFeet(other, placed) < DEDUP_FT);
+    if (!collides) {
+      kept.push(placed);
+    }
+  }
+  return kept;
 }
 
 // === Stage B: vision pass over the placed corners ===
