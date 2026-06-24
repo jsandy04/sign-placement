@@ -47,7 +47,7 @@ async function runAnalysis(input: AnalyzeInput): Promise<SignPlacementResult> {
 
   // Discovery stays deterministic geometry — ray-cast to find the genuine approaches. The LLM judges
   // which of them matter (it no longer scores roads with arithmetic).
-  const approaches = await findApproachRoads(property, signCount);
+  const approaches = await findApproachRoads(property);
   const routes = await computeRoutes(property, approaches);
 
   if (routes.length === 0) {

@@ -1,5 +1,4 @@
 import { computeRoutes as computeGoogleRoute } from "@/lib/services/google-maps";
-import { approachRadiusForSignCount } from "@/lib/rules/placement";
 import type { ApproachRoad, LatLng, RouteStep } from "@/lib/types";
 import { bearingDeltaDegrees, destinationPoint, haversineDistanceFeet } from "@/lib/utils/geo";
 
@@ -11,6 +10,9 @@ const RAY_BEARINGS = [0, 45, 90, 135, 180, 225, 270, 315];
 const MIN_APPROACH_SEPARATION_DEG = 60;
 const HARD_APPROACH_SEPARATION_DEG = 30;
 const MAX_APPROACH_ROADS = 5;
+// Fixed discovery radius (~0.6 mi). It reflects where the property's arterials actually are, NOT the
+// sign budget — scaling reach with budget was the "more signs = one longer trail to the freeway" bug.
+const DISCOVERY_RADIUS_FT = 3_168;
 // Same-road dedup is bearing-aware (new-tmfa.md Q1): NB and SB traffic on the same arterial are two
 // distinct approaches ("half the audience never sees the sign" with one-direction coverage). Only
 // merge two same-named approaches when they come from roughly the SAME direction (within 40°); when
@@ -30,16 +32,15 @@ interface ApproachCandidate extends ApproachRoad {
   classScore: number;
 }
 
-export async function findApproachRoads(origin: LatLng, signCount: number): Promise<ApproachRoad[]> {
+export async function findApproachRoads(origin: LatLng): Promise<ApproachRoad[]> {
   // Surface MORE approaches than the budget can fund so the LLM strategist has real options to judge
   // — including the third/fourth way in a realtor would think of (e.g. out to a different arterial).
   // Discovery is geometry; the strategist decides which of these actually matter, and the UI shows
   // the rest as "available — needs +N signs" (design-thesis "surface, don't mandate").
   const maxApproaches = MAX_APPROACH_ROADS;
-  // Sign budget also drives how far out we search (research §0.7): a tight budget stays close
-  // (~0.5 mi), a large budget reaches further (up to 1 mi). The trail is still anchored at the
-  // arterial turn-off, so this controls reach without pushing signs far from the house.
-  const discoveryRadiusFt = approachRadiusForSignCount(signCount);
+  // More signs should buy broader coverage and density near the house — NOT a trail that reaches
+  // farther out. So the search radius is fixed, decoupled from the budget.
+  const discoveryRadiusFt = DISCOVERY_RADIUS_FT;
   const attempts = await Promise.allSettled(
     RAY_BEARINGS.map(async (bearing) => {
       const rayEnd = destinationPoint(origin, bearing, discoveryRadiusFt);
