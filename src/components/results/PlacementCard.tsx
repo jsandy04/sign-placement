@@ -35,12 +35,35 @@ export function PlacementCard({
           </div>
           {isProperty ? (
             <Badge className="border-zinc-300 bg-zinc-100 text-zinc-800">Mandatory</Badge>
-          ) : typeof placement.score === "number" ? (
-            <Badge>{Math.round(placement.score)}</Badge>
+          ) : placement.role ? (
+            <Badge className="capitalize">{placement.role.replace("-", " ")}</Badge>
           ) : null}
         </div>
         <p className="text-sm leading-5 text-zinc-700">{placement.description}</p>
       </button>
+      {placement.streetViewChecked && (placement.visionNote || (placement.hazards?.length ?? 0) > 0) ? (
+        <div
+          className={`mt-2 rounded-md border px-3 py-2 text-xs leading-5 ${
+            placement.visionUsable === false
+              ? "border-amber-300 bg-amber-50 text-amber-900"
+              : "border-zinc-200 bg-zinc-50 text-zinc-600"
+          }`}
+        >
+          <span className="font-medium">
+            {placement.visionUsable === false ? "⚠ Corner check: " : "Corner check: "}
+          </span>
+          {placement.visionNote}
+          {placement.hazards && placement.hazards.length > 0 ? (
+            <span className="mt-1 flex flex-wrap gap-1">
+              {placement.hazards.map((hazard) => (
+                <span key={hazard} className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+                  {hazard}
+                </span>
+              ))}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <ExpandToggle expanded={expanded} onToggle={() => setExpanded((value) => !value)} />
         {streetViewAvailable ? (
