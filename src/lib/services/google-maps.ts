@@ -171,6 +171,12 @@ export async function streetViewAvailable(location: LatLng): Promise<boolean> {
   try {
     const response = await fetch(`${STREETVIEW_METADATA_URL}?${params.toString()}`);
     const data = (await response.json()) as { status?: string };
+    // REQUEST_DENIED here almost always means the Street View Static API isn't enabled on the SERVER
+    // key (a separate API from the Maps JS Street View the browser panel uses). Log anything that
+    // isn't a genuine "no coverage" so an all-corners-"no coverage" result is diagnosable, not silent.
+    if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+      console.warn(`[streetview] metadata status=${data.status} — enable "Street View Static API" on GOOGLE_MAPS_API_KEY`);
+    }
     return data.status === "OK";
   } catch {
     return false;
