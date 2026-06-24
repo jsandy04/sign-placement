@@ -93,6 +93,19 @@ async function runAnalysis(input: AnalyzeInput): Promise<SignPlacementResult> {
     approaches: briefingApproaches,
   };
 
+  // DIAGNOSTIC: what did discovery actually find? (How many distinct approaches, which roads,
+  // directions, distances, turn counts.) This tells us whether thin coverage is a discovery problem
+  // or a strategy problem.
+  console.log(
+    `[diag] ${signCount} signs requested — discovery found ${briefingApproaches.length} approaches:\n` +
+      briefingApproaches
+        .map(
+          (a) =>
+            `  #${a.index} ${a.roadName} (${a.compass}, ${a.bearingDegrees}°) — ${a.distanceFt}ft, ${a.speedMph}mph, ${a.signableTurns} turns, ${a.decisionPoints.length} points`,
+        )
+        .join("\n"),
+  );
+
   // Stage A — the LLM decides which approaches and which corners. Degrade to a minimal deterministic
   // trail if it fails, so the pipeline always returns something usable.
   let decision: StrategistDecision;
@@ -104,6 +117,14 @@ async function runAnalysis(input: AnalyzeInput): Promise<SignPlacementResult> {
     decision = deterministicFallback(routes);
     degradationLevel = 3;
   }
+
+  // DIAGNOSTIC: what did the strategist decide to do with those approaches?
+  console.log(
+    `[diag] strategist chose approaches [${decision.chosen_approaches.join(", ")}] as "${decision.property_type}", ${decision.signs.length} signs:\n` +
+      decision.signs
+        .map((s) => `  ${s.role} @ approach#${s.approach_index} (point ${s.decision_point_id}, order ${s.order})`)
+        .join("\n"),
+  );
 
   // Stage C — geometry turns each chosen decision point into a precise, lead-distance-correct,
   // 45°-to-the-curb coordinate. The strategist picked WHICH; the math places it.
